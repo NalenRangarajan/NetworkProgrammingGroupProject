@@ -90,6 +90,7 @@ int main(int argc, char **argv)
 					//return EXIT_FAILURE;
 				}
         
+        //Create Chat Server entry
         struct entry *new_entry;
         new_entry = malloc(sizeof(struct entry));
         new_entry->socketid = newsockfd;
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
         }
       }
 
-		  /* TODO: Iterate through your client sockets */
+		  /* Iterate through your client and server sockets */
    
       LIST_FOREACH(cli, &head, entries)
       {
@@ -132,8 +133,8 @@ int main(int argc, char **argv)
             }
   				}         
           
-          if (s[0] == 'c') { //client            
-            if(strnlen(s, MAX) == 1) //active chats query
+          if (s[0] == 'c') { //reading from a client            
+            if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
             {
               int index = 0;
               int n = 0;
@@ -141,6 +142,7 @@ int main(int argc, char **argv)
               ssize_t offset = 0;
               LIST_FOREACH(clj, &head, entries)
               {
+                //write all active servers into the s1 buffer
                 if(clj->name && clj->ipaddress)
                 {
                   n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
@@ -168,9 +170,10 @@ int main(int argc, char **argv)
             else //client picks a chat
             {
               char server_name[MAX] = {'\0'};
+              //grab server name from client request
               if(sscanf(s, "c%99[^\n]", server_name) == 1)
               {
-              int found = 0;
+                int found = 0;
                 LIST_FOREACH(clj, &head, entries)
                 {
                   if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
@@ -196,18 +199,16 @@ int main(int argc, char **argv)
                 } 
               }
             }
-            
-            
       		}
-          else if (s[0] == 's') 
+          else if (s[0] == 's') //reading from a server
           {
             char *s1 = calloc(1, strnlen(s, MAX) + 1);
             snprintf(s1, strnlen(s, MAX), "%s", s + 1);
             char temp_name[100];
             int temp_port = 0;
+            //get name and port number from s
             if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
             {
-            
               int unique_name = 1;
               LIST_FOREACH(clj, &head, entries)
               {
@@ -238,7 +239,7 @@ int main(int argc, char **argv)
                   continue;
                 }
               }
-              else
+              else //Add server
               {
                 ssize_t nwrite = write(cli->socketid, "Connected!\n", 11);
                 if(nwrite < 0) {

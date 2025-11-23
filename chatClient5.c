@@ -41,7 +41,7 @@ int main()
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
     int n = snprintf(s_d, MAX, "c"); 
-    ssize_t nwrite = write(dir_sockfd, s_d, n); 
+    ssize_t nwrite = write(dir_sockfd, s_d, n); //Write just 'c' to the directory server
     if(nwrite < 0) { 
       fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__);       //DEBUG 
       } 
@@ -56,14 +56,15 @@ int main()
           ssize_t nread = read(dir_sockfd, s_d1, MAX * 10); 
           if (nread <= 0) 
           { 
-            /* Not every error is fatal. Check the return value and act accordingly. */             fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); 
+            /* Not every error is fatal. Check the return value and act accordingly. */             
+            fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); 
             //DEBUG 
           } 
           else 
           { 
             s_d1[nread] = '\0'; 
             fprintf(stderr, "%s\n",s_d1); 
-            if(strncmp(s_d1, "Chat directory:\n", MAX * 10) != 0)
+            if(strncmp(s_d1, "Chat directory:\n", MAX * 10) != 0) //read until we see "Chat directory:"
             { 
               break; 
             } 
@@ -107,6 +108,7 @@ int main()
         {
           if(index >= 0 && index <= server_count)
           {
+            //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
             ssize_t nwrite1 = write(dir_sockfd, s_d2, n1);
             if(nwrite < 0) {

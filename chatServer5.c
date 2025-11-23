@@ -39,7 +39,8 @@ int main(int argc, char **argv)
 		perror("server: can't set stream socket address reuse option");
 		return EXIT_FAILURE;
 	}
- 
+  
+  //If command line args were correctly input
   if(argc == 3)
   {
     snprintf(chatname, "%s", argv[1]);
@@ -61,7 +62,7 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
-  else
+  else //query for remaining args
   {
     fprintf(stderr, "Enter chat name: ");
     if(scanf("%99[^\t\n]", chatname) != 1)
@@ -150,6 +151,9 @@ int main(int argc, char **argv)
   					fprintf(stderr, "%s", s_dir1);
             break;
           }
+          /*
+          We want to quit reading when we see Connected!, but we will see Chat directory: first so we want to do nothing here 
+          */
           else if(strncmp(s_dir1, "Chat directory:\n", MAX) == 0)
           {
           //do nothing
@@ -206,6 +210,7 @@ int main(int argc, char **argv)
           continue;
 				}
         
+        //Add new chat clients
         struct entry *new_entry;
         new_entry = malloc(sizeof(struct entry));
         new_entry->socketid = newsockfd;
