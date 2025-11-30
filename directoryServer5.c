@@ -50,7 +50,19 @@ int main(int argc, char **argv)
 
   SSL_CTX_set_options(ctx, options);
 
-  //FIX ME ADD CHECK GENERATED KEY FILE 
+  if(SSL_CTX_use_certificate_chain_file(ctx, "noPassDirectory.crt") <= 0)
+  {
+    SSL_CTX_free(ctx);
+    ERR_print_errors_fp(stderr);
+    perror("Failed to load the server certificate chain file");
+  }
+
+  if(SSL_CTX_use_PrivateKey_file(ctx, "noPassDirectory.key", SSL_FILETYPE_PEM) <= 0)
+  {
+    SSL_CTX_free(ctx);
+    ERR_print_errors_fp(stderr);
+    perror("Error loading server private key file");
+  }
 
 	/* Create communication endpoint */
 	int sockfd;			/* Listening socket */
