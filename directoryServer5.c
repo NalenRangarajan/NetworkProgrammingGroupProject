@@ -32,7 +32,7 @@ int main(int argc, char **argv)
   SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
   if(ctx == NULL)
   {
-    perror("client: Failed to create the SSL_CTX");
+    perror("Directory Server: Failed to create the SSL_CTX");
     return;
   }
   
@@ -41,11 +41,11 @@ int main(int argc, char **argv)
   //Ensure minimum TLS version
   if(!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION))
   {
-    perror("client: Failed to set minimum TLS version");
+    perror("Directory Server: Failed to set minimum TLS version");
     return;
   }
 
-  //We are assuming that CPU exhaustion attacks will not occur so |= SSL_OP_No_RENEGOTIATION is not necessary
+  //We are assuming that CPU exhaustion attacks will not occur so |= SSL_OP_NO_RENEGOTIATION is not necessary
   options = SSL_OP_IGNORE_UNEXPECTED_EOF;
 
   SSL_CTX_set_options(ctx, options);
@@ -186,164 +186,159 @@ int main(int argc, char **argv)
   			if (FD_ISSET(SSL_get_fd(cli->ssl), &readset)) {
   
   				char s[MAX] = {'\0'};
-          int n_pending;
-          fprintf(stderr, "before pending\n");
-          if((n_pending = SSL_pending(cli->ssl)) > 0)
-          {
-            fprintf(stderr, "in pending\n");
-            ssize_t nread = SSL_read(cli->ssl, s, MAX);
-            fprintf(stderr, "Read %d\n", nread);
-            if (nread <= 0) {
-              /* Not every error is fatal. Check the return value and act accordingly. */
-              SSL_free(cli->ssl);
-              LIST_REMOVE(cli, entries);
+          ssize_t nread = SSL_read(cli->ssl, s, MAX);
+          fprintf(stderr, "%s", s);
+          fprintf(stderr, "Read %d\n", nread);
+          if (nread <= 0) {
+            /* Not every error is fatal. Check the return value and act accordingly. */
+            SSL_free(cli->ssl);
+            LIST_REMOVE(cli, entries);
+            if(cli->name)
+            {              
               if(cli->name)
-              {              
-                if(cli->name)
-                {
-                  free(cli->name);
-                }
-                if(cli->ipaddress)
-                {
-                  free(cli->ipaddress);
-                }
-                free(cli);
-                continue;
-              }
-            }         
-            
-            fprintf(stderr, "before c check");
-            if (s[0] == 'c') { //reading from a client            
-              if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
               {
-                fprintf(stderr, "Inside c check");
-                int index = 0;
-                int n = 0;
-                char s1[MAX * 10] = {'\0'};
-                ssize_t offset = 0;
-                LIST_FOREACH(clj, &head, entries)
-                {
-                  //write all active servers into the s1 buffer
-                  if(clj->name && clj->ipaddress)
-                  {
-                    n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
-                    
-                    offset += n;
-                    index++;
-                  }
-                }
-                fprintf(stderr, "Before index check");
-                if(index == 0)
-                {
-                  n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
-                  offset += n;
-                }
-                else
-                {
-                  n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
-                  offset += n;
-                }
-                
-                fprintf(stderr, "Before no chats write");
-                ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
-                fprintf(stderr, "After no chats write, %d", nwrite);
-                if(nwrite <= 0) {
-                  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                }
+                free(cli->name);
               }
-              else //client picks a chat
+              if(cli->ipaddress)
               {
-                char server_name[MAX] = {'\0'};
-                //grab server name from client request
-                if(sscanf(s, "c%99[^\n]", server_name) == 1)
-                {
-                  int found = 0;
-                  LIST_FOREACH(clj, &head, entries)
-                  {
-                    if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
-                    {
-                      found = 1;
-                      int n = 0;
-                      char s1[MAX] = {'\0'};
-                      n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
-                      ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                      if(nwrite <= 0) {
-                        fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                      } 
-                    }
-                  }
-                  if(found == 0)
-                  {
-                    char s1[MAX] = {'\0'};
-                    int n = snprintf(s1, MAX, "fail");
-                    ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                    if(nwrite <= 0) {
-                      fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                    }
-                  } 
-                }
+                free(cli->ipaddress);
               }
+              free(cli);
+              continue;
             }
-            else if (s[0] == 's') //reading from a server
+          }         
+          
+          fprintf(stderr, "before c check");
+          if (s[0] == 'c') { //reading from a client            
+            if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
             {
-              char *s1 = calloc(1, strnlen(s, MAX) + 1);
-              snprintf(s1, strnlen(s, MAX), "%s", s + 1);
-              char temp_name[100];
-              int temp_port = 0;
-              //get name and port number from s
-              if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
+              fprintf(stderr, "Inside c check");
+              int index = 0;
+              int n = 0;
+              char s1[MAX * 10] = {'\0'};
+              ssize_t offset = 0;
+              LIST_FOREACH(clj, &head, entries)
               {
-                int unique_name = 1;
-                LIST_FOREACH(clj, &head, entries)
+                //write all active servers into the s1 buffer
+                if(clj->name && clj->ipaddress)
                 {
-                  if(clj->name && strncmp(temp_name, clj->name, MAX) == 0)
-                  {
-                    unique_name = 0;
-                  }
+                  n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
+                  
+                  offset += n;
+                  index++;
                 }
-                if(unique_name == 0)
-                {
-                  ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
-                  if(nwrite <= 0) {
-                    fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                  }
-                  SSL_free(cli->ssl);
-                  LIST_REMOVE(cli, entries);
-                  if(cli->name)
-                  {              
-                    if(cli->name)
-                    {
-                      free(cli->name);
-                    }
-                    if(cli->ipaddress)
-                    {
-                      free(cli->ipaddress);
-                    }
-                    free(cli);
-                    continue;
-                  }
-                }
-                else //Add server
-                {
-                  ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
-                  if(nwrite <= 0) {
-                    fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                  }
-                  cli->name = malloc(MAX);
-                  snprintf(cli->name, MAX, "%s", temp_name);
-                  cli->portnum = temp_port;
-                  cli->ipaddress = malloc(MAX);
-                  snprintf(cli->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
-                }
+              }
+              fprintf(stderr, "Before index check");
+              if(index == 0)
+              {
+                n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
+                offset += n;
               }
               else
               {
-                fprintf(stderr, "%s:%d Error parsing chat server arguments\n", __FILE__, __LINE__); //DEBUG
+                n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
+                offset += n;
+              }
+              
+              fprintf(stderr, "Before no chats write");
+              ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
+              fprintf(stderr, "After no chats write, %d", nwrite);
+              if(nwrite <= 0) {
+                fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
               }
             }
-            else {
-              snprintf(s, MAX, "Invalid request");
+            else //client picks a chat
+            {
+              char server_name[MAX] = {'\0'};
+              //grab server name from client request
+              if(sscanf(s, "c%99[^\n]", server_name) == 1)
+              {
+                int found = 0;
+                LIST_FOREACH(clj, &head, entries)
+                {
+                  if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
+                  {
+                    found = 1;
+                    int n = 0;
+                    char s1[MAX] = {'\0'};
+                    n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
+                    ssize_t nwrite = SSL_write(cli->ssl, s1, n);
+                    if(nwrite <= 0) {
+                      fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
+                    } 
+                  }
+                }
+                if(found == 0)
+                {
+                  char s1[MAX] = {'\0'};
+                  int n = snprintf(s1, MAX, "fail");
+                  ssize_t nwrite = SSL_write(cli->ssl, s1, n);
+                  if(nwrite <= 0) {
+                    fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
+                  }
+                } 
+              }
             }
+          }
+          else if (s[0] == 's') //reading from a server
+          {
+            char *s1 = calloc(1, strnlen(s, MAX) + 1);
+            snprintf(s1, strnlen(s, MAX), "%s", s + 1);
+            char temp_name[100];
+            int temp_port = 0;
+            //get name and port number from s
+            if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
+            {
+              int unique_name = 1;
+              LIST_FOREACH(clj, &head, entries)
+              {
+                if(clj->name && strncmp(temp_name, clj->name, MAX) == 0)
+                {
+                  unique_name = 0;
+                }
+              }
+              if(unique_name == 0)
+              {
+                ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
+                if(nwrite <= 0) {
+                  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
+                }
+                SSL_free(cli->ssl);
+                LIST_REMOVE(cli, entries);
+                if(cli->name)
+                {              
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                  }
+                  if(cli->ipaddress)
+                  {
+                    free(cli->ipaddress);
+                  }
+                  free(cli);
+                  continue;
+                }
+              }
+              else //Add server
+              {
+                ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
+                if(nwrite <= 0) {
+                  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
+                }
+                cli->name = malloc(MAX);
+                snprintf(cli->name, MAX, "%s", temp_name);
+                cli->portnum = temp_port;
+                cli->ipaddress = malloc(MAX);
+                snprintf(cli->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
+              }
+            }
+            else
+            {
+              fprintf(stderr, "%s:%d Error parsing chat server arguments\n", __FILE__, __LINE__); //DEBUG
+            }
+          }
+          else {
+            snprintf(s, MAX, "Invalid request");
           }
         }  
       }

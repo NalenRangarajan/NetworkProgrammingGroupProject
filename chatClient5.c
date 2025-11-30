@@ -137,31 +137,29 @@ int main()
         if (FD_ISSET(dir_sockfd, &readset)) 
         { 
           int p_result;
-          if((p_result = SSL_pending(directory_ssl)) > 0)
-          {
-            ssize_t nread = SSL_read(directory_ssl, s_d1, p_result); 
-            if (nread <= 0) 
+          ssize_t nread = SSL_read(directory_ssl, s_d1, MAX); 
+          fprintf(stderr, "%s", s_d1);
+          if (nread <= 0) 
+          { 
+            /* Not every error is fatal. Check the return value and act accordingly. */             
+            //fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); 
+            //DEBUG 
+          } 
+          else 
+          { 
+            s_d1[nread] = '\0'; 
+            fprintf(stderr, "%s\n",s_d1); 
+            if(strncmp(s_d1, "Chat directory:\n", MAX * 10) != 0) //read until we see "Chat directory:"
             { 
-              /* Not every error is fatal. Check the return value and act accordingly. */             
-              fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); 
-              //DEBUG 
+              break; 
             } 
-            else 
-            { 
-              s_d1[nread] = '\0'; 
-              fprintf(stderr, "%s\n",s_d1); 
-              if(strncmp(s_d1, "Chat directory:\n", MAX * 10) != 0) //read until we see "Chat directory:"
-              { 
-                break; 
-              } 
-            } 
-          }
+          } 
           
         } 
       } 
     }
     //Read all online chats
-    if(strncmp(s_d1, "No chats online", MAX * 10) != 0) 
+    if(strncmp(s_d1, "No chats online\n", MAX * 10) != 0) 
     {
       int server_count = -1;
       char server_info[MAX * 2];
@@ -225,31 +223,27 @@ int main()
         {
           if (FD_ISSET(dir_sockfd, &readset)) 
           {
-            int p_result;
-            if((p_result = SSL_pending(directory_ssl)) > 0)
+            ssize_t nread = SSL_read(directory_ssl, s_d3, MAX);
+            if(nread <= 0) 
             {
-              ssize_t nread = SSL_read(directory_ssl, s_d3, p_result);
-              if(nread <= 0) 
+              /* Not every error is fatal. Check the return value and act accordingly. */
+              fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
+            } 
+            else 
+            {
+              if(strncmp(s_d3, "fail", 4) == 0)
               {
-                /* Not every error is fatal. Check the return value and act accordingly. */
-                fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
-              } 
-              else 
+                fprintf(stderr, "Server not found");
+                exit(1);
+              }
+              if(sscanf(s_d3, "%99s %d", ip_address, &port) == 2)
               {
-                if(strncmp(s_d3, "fail", 4) == 0)
-                {
-                  fprintf(stderr, "Server not found");
-                  exit(1);
-                }
-                if(sscanf(s_d3, "%99s %d", ip_address, &port) == 2)
-                {
-                  printf("Connecting to chat server...\n");
-                  break;
-                }
-                else
-                {
-                  fprintf(stderr, "%s:%d Error parsing directory server messages\n", __FILE__, __LINE__); //DEBUG
-                }
+                printf("Connecting to chat server...\n");
+                break;
+              }
+              else
+              {
+                fprintf(stderr, "%s:%d Error parsing directory server messages\n", __FILE__, __LINE__); //DEBUG
               }
             }
           }
@@ -367,18 +361,14 @@ int main()
 
 			/* Check whether there's a message from the server to read */
 			if (FD_ISSET(sockfd, &readset)) {
-        int n_pending;
-        if((n_pending = SSL_pending(chat_ssl)) > 0)
-        {
-          ssize_t nread = SSL_read(chat_ssl, s, MAX);
-          if (nread <= 0) {
-            /* Not every error is fatal. Check the return value and act accordingly. */
-            fprintf(stderr, "%s:%d Error reading from server\n", __FILE__, __LINE__); //DEBUG
-          } else {
-            /* Also found from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
-            Removes "Enter message: " string and resets cursor when recieving data based on another client's input */
-            fprintf(stderr, "\x1b[2K\r%s", s);
-          }
+        ssize_t nread = SSL_read(chat_ssl, s, MAX);
+        if (nread <= 0) {
+          /* Not every error is fatal. Check the return value and act accordingly. */
+          fprintf(stderr, "%s:%d Error reading from server\n", __FILE__, __LINE__); //DEBUG
+        } else {
+          /* Also found from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
+          Removes "Enter message: " string and resets cursor when recieving data based on another client's input */
+          fprintf(stderr, "\x1b[2K\r%s", s);
         }
 			}
 		}
