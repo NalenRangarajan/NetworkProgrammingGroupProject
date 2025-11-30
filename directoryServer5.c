@@ -29,7 +29,7 @@ int main(int argc, char **argv)
   LIST_HEAD(server_list, entry);
 
   //Create SSL_CTX object
-  SSL_CTX ctx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
   if(ctx == NULL)
   {
     perror("client: Failed to create the SSL_CTX");
@@ -186,7 +186,8 @@ int main(int argc, char **argv)
   			if (FD_ISSET(SSL_get_fd(cli->ssl), &readset)) {
   
   				char s[MAX] = {'\0'};
-          if(int  n_pending = SSL_pending(cli->ssl) > 0)
+          int n_pending;
+          if((n_pending = SSL_pending(cli->ssl)) > 0)
           {
             ssize_t nread = SSL_read(cli->ssl, s, n_pending);
             if (nread <= 0) {

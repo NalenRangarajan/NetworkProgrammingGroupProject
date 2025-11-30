@@ -16,10 +16,11 @@ int main()
 	struct sockaddr_in chat_serv_addr, dir_serv_addr;
 	fd_set			readset;
   char ip_address[100];
+  char chat_server_selection[MAX];
   int port = 0;
 
   //Create SSL_CTX object
-  SSL_CTX ctx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
   if(ctx == NULL)
   {
     perror("client: Failed to create the SSL_CTX");
@@ -43,7 +44,7 @@ int main()
   }
 
   //Create SSL object for directory
-  SSL directory_ssl = SSL_new(ctx);
+  SSL* directory_ssl = SSL_new(ctx);
   if(directory_ssl == NULL)
   {
     perror("client: Failed to create SSL object");
@@ -129,7 +130,8 @@ int main()
       { 
         if (FD_ISSET(dir_sockfd, &readset)) 
         { 
-          if(int p_result = SSL_pending(directory_ssl) > 0)
+          int p_result;
+          if((p_result = SSL_pending(directory_ssl)) > 0)
           {
             ssize_t nread = SSL_read(directory_ssl, s_d1, p_result); 
             if (nread <= 0) 
@@ -190,6 +192,7 @@ int main()
           {
             //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
+            snprintf(chat_server_selection, MAX, "c%s\n", server_names[index]);
             ssize_t nwrite1 = SSL_write(directory_ssl, s_d2, n1);
             if(nwrite < 0) {
       			  fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
@@ -216,7 +219,8 @@ int main()
         {
           if (FD_ISSET(dir_sockfd, &readset)) 
           {
-            if(int p_result = SSL_pending(directory_ssl) > 0)
+            int p_result;
+            if((p_result = SSL_pending(directory_ssl)) > 0)
             {
               ssize_t nread = SSL_read(directory_ssl, s_d3, p_result);
               if(nread <= 0) 
@@ -259,7 +263,7 @@ int main()
   }
 
    //Create SSL object for directory
-  SSL chat_ssl = SSL_new(ctx);
+  SSL* chat_ssl = SSL_new(ctx);
   if(chat_ssl == NULL)
   {
     perror("client: Failed to create SSL object");
@@ -302,13 +306,13 @@ int main()
   //Associate the SSL object with the BIO object
   SSL_set_bio(chat_ssl, bio_chat, bio_chat);
 
-  if(!SSL_set_tlsext_host_name(chat_ssl, server_names[index]))
+  if(!SSL_set_tlsext_host_name(chat_ssl, chat_server_selection))
   {
     perror("client: Failed to set SNI hostname");
     return;
   }
 
-  if(!SSL_set1_host(chat_ssl, server_names[index]))
+  if(!SSL_set1_host(chat_ssl, chat_server_selection))
   {
     perror("client: Failed to set certificate verification hostname");
     return;
@@ -357,7 +361,8 @@ int main()
 
 			/* Check whether there's a message from the server to read */
 			if (FD_ISSET(sockfd, &readset)) {
-        if(int n_pending = SSL_pending(chat_ssl) > 0)
+        int n_pending;
+        if((n_pending = SSL_pending(chat_ssl)) > 0)
         {
           ssize_t nread = SSL_read(chat_ssl, s, n_pending);
           if (nread <= 0) {
@@ -372,7 +377,8 @@ int main()
 			}
 		}
 	}
-  SSL_free(ssl);
+  SSL_free(directory_ssl);
+  SSL_free(chat_ssl);
   SSL_CTX_free(ctx);
 	// return or exit(0) is implied; no need to do anything because main() ends
 }
