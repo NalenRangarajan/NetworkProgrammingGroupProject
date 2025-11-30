@@ -29,12 +29,14 @@ int main(int argc, char **argv)
   LIST_HEAD(server_list, entry);
 
   //Create SSL_CTX object
-  SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
   if(ctx == NULL)
   {
     perror("client: Failed to create the SSL_CTX");
     return;
   }
+  
+  SSL_CTX_clear_mode(ctx, SSL_MODE_AUTO_RETRY);
 
   //Ensure minimum TLS version
   if(!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION))
@@ -45,8 +47,6 @@ int main(int argc, char **argv)
 
   //We are assuming that CPU exhaustion attacks will not occur so |= SSL_OP_No_RENEGOTIATION is not necessary
   options = SSL_OP_IGNORE_UNEXPECTED_EOF;
-
-  options |= SSL_OP SERVER_PREFERENCE;
 
   SSL_CTX_set_options(ctx, options);
 
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
   bio = BIO_new(BIO_s_accept());
   if(bio == NULL)
   {
-    BIO_close_socket(sockfd);
+    BIO_closesocket(sockfd);
     return;
   }
 
@@ -141,9 +141,9 @@ int main(int argc, char **argv)
 					perror("server: accept error");	
           continue;
         }
-        BIO client_bio = BIO_pop(bio);
+        BIO* client_bio = BIO_pop(bio);
         fprintf(stderr, "New client connection accepted\n");
-
+        SSL* ssl;
         if((ssl = SSL_new(ctx)) == NULL)
         {
           ERR_print_errors_fp(stderr);
@@ -172,8 +172,8 @@ int main(int argc, char **argv)
         new_entry->ipaddress = malloc(MAX);
         strncpy(new_entry->ipaddress, inet_ntoa(cli_addr.sin_addr), MAX);
         LIST_INSERT_HEAD(&head, new_entry, entries);
-        ssize_t nwrite = write(new_entry->ssl, "Chat directory:\n", 17); 
-        if(nwrite < 0) 
+        ssize_t nwrite = SSL_write(new_entry->ssl, "Chat directory:\n", 17); 
+        if(nwrite <= 0) 
         { 
           fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG }
         }
@@ -187,9 +187,12 @@ int main(int argc, char **argv)
   
   				char s[MAX] = {'\0'};
           int n_pending;
+          fprintf(stderr, "before pending\n");
           if((n_pending = SSL_pending(cli->ssl)) > 0)
           {
-            ssize_t nread = SSL_read(cli->ssl, s, n_pending);
+            fprintf(stderr, "in pending\n");
+            ssize_t nread = SSL_read(cli->ssl, s, MAX);
+            fprintf(stderr, "Read %d\n", nread);
             if (nread <= 0) {
               /* Not every error is fatal. Check the return value and act accordingly. */
               SSL_free(cli->ssl);
@@ -209,9 +212,11 @@ int main(int argc, char **argv)
               }
             }         
             
+            fprintf(stderr, "before c check");
             if (s[0] == 'c') { //reading from a client            
               if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
               {
+                fprintf(stderr, "Inside c check");
                 int index = 0;
                 int n = 0;
                 char s1[MAX * 10] = {'\0'};
@@ -227,7 +232,7 @@ int main(int argc, char **argv)
                     index++;
                   }
                 }
-                
+                fprintf(stderr, "Before index check");
                 if(index == 0)
                 {
                   n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
@@ -238,8 +243,11 @@ int main(int argc, char **argv)
                   n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
                   offset += n;
                 }
+                
+                fprintf(stderr, "Before no chats write");
                 ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
-                if(nwrite < 0) {
+                fprintf(stderr, "After no chats write, %d", nwrite);
+                if(nwrite <= 0) {
                   fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
                 }
               }
@@ -259,7 +267,7 @@ int main(int argc, char **argv)
                       char s1[MAX] = {'\0'};
                       n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
                       ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                      if(nwrite < 0) {
+                      if(nwrite <= 0) {
                         fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
                       } 
                     }
@@ -269,7 +277,7 @@ int main(int argc, char **argv)
                     char s1[MAX] = {'\0'};
                     int n = snprintf(s1, MAX, "fail");
                     ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                    if(nwrite < 0) {
+                    if(nwrite <= 0) {
                       fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
                     }
                   } 
@@ -296,10 +304,10 @@ int main(int argc, char **argv)
                 if(unique_name == 0)
                 {
                   ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
-                  if(nwrite < 0) {
+                  if(nwrite <= 0) {
                     fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
                   }
-                  SSL_free(cli->ssl)
+                  SSL_free(cli->ssl);
                   LIST_REMOVE(cli, entries);
                   if(cli->name)
                   {              
@@ -318,7 +326,7 @@ int main(int argc, char **argv)
                 else //Add server
                 {
                   ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
-                  if(nwrite < 0) {
+                  if(nwrite <= 0) {
                     fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
                   }
                   cli->name = malloc(MAX);

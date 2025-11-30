@@ -27,6 +27,8 @@ int main()
     return;
   }
 
+  SSL_CTX_clear_mode(ctx, SSL_MODE_AUTO_RETRY);
+
   //Configure to include certificate verification
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
 
@@ -42,6 +44,8 @@ int main()
     perror("client: Failed to set minimum TLS version");
     return;
   }
+
+  SSL_CTX_load_verify_locations(ctx, "noPassRootCA.crt", NULL);
 
   //Create SSL object for directory
   SSL* directory_ssl = SSL_new(ctx);
@@ -77,7 +81,7 @@ int main()
   bio = BIO_new(BIO_s_socket());
   if(bio == NULL)
   {
-    BIO_close_socket(dir_sockfd);
+    BIO_closesocket(dir_sockfd);
     return;
   }
 
@@ -118,8 +122,10 @@ int main()
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
     int n = snprintf(s_d, MAX, "c"); 
+    fprintf(stderr, "hit this");
     ssize_t nwrite = SSL_write(directory_ssl, s_d, n); //Write just 'c' to the directory server
-    if(nwrite < 0) { 
+    fprintf(stderr, "hit %d", nwrite);
+    if(nwrite <= 0) { 
       fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__);       //DEBUG 
       } 
     int chat_count = 0; 
@@ -194,7 +200,7 @@ int main()
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
             snprintf(chat_server_selection, MAX, "c%s\n", server_names[index]);
             ssize_t nwrite1 = SSL_write(directory_ssl, s_d2, n1);
-            if(nwrite < 0) {
+            if(nwrite <= 0) {
       			  fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
               loop = 1;
             }
@@ -296,7 +302,7 @@ int main()
   bio_chat = BIO_new(BIO_s_socket());
   if(bio_chat == NULL)
   {
-    BIO_close_socket(sockfd);
+    BIO_closesocket(sockfd);
     return;
   }
 
@@ -351,7 +357,7 @@ int main()
           fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
           fprintf(stderr, "\x1b[2K"); //Delete content on this line
          
-          if(nwrite < 0) {
+          if(nwrite <= 0) {
 					  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
           }
 				} else {
@@ -364,7 +370,7 @@ int main()
         int n_pending;
         if((n_pending = SSL_pending(chat_ssl)) > 0)
         {
-          ssize_t nread = SSL_read(chat_ssl, s, n_pending);
+          ssize_t nread = SSL_read(chat_ssl, s, MAX);
           if (nread <= 0) {
             /* Not every error is fatal. Check the return value and act accordingly. */
             fprintf(stderr, "%s:%d Error reading from server\n", __FILE__, __LINE__); //DEBUG
