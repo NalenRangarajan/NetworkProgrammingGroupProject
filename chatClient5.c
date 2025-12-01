@@ -121,7 +121,7 @@ int main()
   FD_SET(STDIN_FILENO, &readset); 
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
-    int n = snprintf(s_d, MAX, "c"); 
+    int n = snprintf(s_d, MAX, "c\0"); 
     fprintf(stderr, "hit this");
     ssize_t nwrite = SSL_write(directory_ssl, s_d, n); //Write just 'c' to the directory server
     fprintf(stderr, "hit %d", nwrite);
@@ -270,8 +270,6 @@ int main()
     return;
   }
   
-
-
 	/* Set up the address of the chat server. */
 	memset((char *) &chat_serv_addr, 0, sizeof(chat_serv_addr));
 	chat_serv_addr.sin_family			= AF_INET;

@@ -181,8 +181,10 @@ int main(int argc, char **argv)
 
 		  /* Iterate through your client and server sockets */
    
-      LIST_FOREACH(cli, &head, entries)
+      cli = LIST_FIRST(&head);
+      while(cli != NULL)
       {
+        struct entry *next = LIST_NEXT(cli, entries);
   			if (FD_ISSET(SSL_get_fd(cli->ssl), &readset)) {
   
   				char s[MAX] = {'\0'};
@@ -204,8 +206,9 @@ int main(int argc, char **argv)
                 free(cli->ipaddress);
               }
               free(cli);
-              continue;
             }
+            cli = next;
+            continue;
           }         
           
           fprintf(stderr, "before c check");
@@ -340,7 +343,8 @@ int main(int argc, char **argv)
           else {
             snprintf(s, MAX, "Invalid request");
           }
-        }  
+        } 
+        cli = next; 
       }
     }
 
