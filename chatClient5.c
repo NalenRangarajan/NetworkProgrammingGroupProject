@@ -10,6 +10,39 @@
 #include "inet.h"
 #include "common.h"
 
+static int handle_io_failure(SSL *ssl, int res)
+{
+    switch (SSL_get_error(ssl, res)) {
+    case SSL_ERROR_WANT_READ:
+        /* Temporary failure. Wait until we can read and try again */
+        return 1;
+
+    case SSL_ERROR_WANT_WRITE:
+        /* Temporary failure. Wait until we can write and try again */
+        return 1;
+
+    case SSL_ERROR_ZERO_RETURN:
+        /* EOF */
+        return 0;
+
+    case SSL_ERROR_SYSCALL:
+        return -1;
+
+    case SSL_ERROR_SSL:
+        /*
+        * If the failure is due to a verification error we can get more
+        * information about it from SSL_get_verify_result().
+        */
+        if (SSL_get_verify_result(ssl) != X509_V_OK)
+            printf("Verify error: %s\n",
+                X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+        return -1;
+
+    default:
+        return -1;
+    }
+}
+
 int main()
 {
 	int				sockfd, dir_sockfd;
@@ -18,6 +51,7 @@ int main()
   char ip_address[100];
   char chat_server_selection[MAX];
   int port = 0;
+  int ret;
 
   //Create SSL_CTX object
   SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
@@ -103,15 +137,12 @@ int main()
     return;
   }
 
-  if(SSL_connect(directory_ssl) < 1)
+  while ((ret = SSL_connect(directory_ssl)) != 1)
   {
-    perror("client: Failed to connect to server");
-
-    if(SSL_get_verify_result(directory_ssl) != X509_V_OK)
-    {
-      fprintf(stderr, "Verify error: %s\n", X509_verify_cert_error_string(SSL_get_verify_result(directory_ssl)));
-    }
-    return;
+    if (handle_io_failure(directory_ssl, ret) == 1)
+      continue;
+    printf("Failed to connect to server\n");
+    return
   }
 
 	/* Your directory server logic here... */ 
@@ -122,14 +153,16 @@ int main()
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
     int n = snprintf(s_d, MAX, "c\0"); 
-    fprintf(stderr, "hit this");
-    ssize_t nwrite = SSL_write(directory_ssl, s_d, n); //Write just 'c' to the directory server
-    fprintf(stderr, "hit %d", nwrite);
-    if(nwrite <= 0) { 
-      fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__);       //DEBUG 
-      } 
-    int chat_count = 0; 
-    int offset = 0; 
+    while(!SSL_write(directory_ssl, s_d, n))
+    {
+      if (handle_io_failure(directory_ssl, 0) == 1)
+        continue; /* Retry */
+      fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
+      SSL_free(directory_ssl);
+      SSL_CTX_free(ctx);
+      return;
+    }
+
     for(;;) //read until server response 
     { 
       if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) 
@@ -141,12 +174,28 @@ int main()
           fprintf(stderr, "%s", s_d1);
           if (nread <= 0) 
           { 
-            /* Not every error is fatal. Check the return value and act accordingly. */             
-            //fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); 
-            //DEBUG 
+            /* Not every error is fatal. Check the return value and act accordingly. */
+            switch (handle_io_failure(directory_ssl, 0)) {
+              case: 1
+                continue;
+              case: 0
+                error("Error: Connection closed by directory")
+                SSL_free(directory_ssl);
+                SSL_CTX_free(ctx);
+                return;
+              case: -1
+                perror("Error: System error")
+                SSL_free(directory_ssl);
+                SSL_CTX_free(ctx);
+                return;
+              default:
+                printf("Failed reading remaining data\n");
+                return;
+            }
+            fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
           } 
           else 
-          { 
+          {
             s_d1[nread] = '\0'; 
             fprintf(stderr, "%s\n",s_d1); 
             if(strncmp(s_d1, "Chat directory:\n", MAX * 10) != 0) //read until we see "Chat directory:"
@@ -197,15 +246,18 @@ int main()
             //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
             snprintf(chat_server_selection, MAX, "c%s\n", server_names[index]);
-            ssize_t nwrite1 = SSL_write(directory_ssl, s_d2, n1);
-            if(nwrite <= 0) {
-      			  fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
-              loop = 1;
-            }
-            else
+            
+            while(!SSL_write(directory_ssl, s_d2, n))
             {
-              loop = 0;
+              loop = 1;
+              if (handle_io_failure(directory_ssl, 0) == 1)
+                continue; /* Retry */
+              fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
+              SSL_free(directory_ssl);
+              SSL_CTX_free(ctx);
+              return;
             }
+            loop = 0;
           }
           else 
           {
@@ -227,6 +279,23 @@ int main()
             if(nread <= 0) 
             {
               /* Not every error is fatal. Check the return value and act accordingly. */
+              switch (handle_io_failure(directory_ssl, 0)) {
+                case: 1
+                  continue;
+                case: 0
+                  error("Error: Connection closed by directory")
+                  SSL_free(directory_ssl);
+                  SSL_CTX_free(ctx);
+                  return;
+                case: -1
+                  perror("Error: System error")
+                  SSL_free(directory_ssl);
+                  SSL_CTX_free(ctx);
+                  return;
+                default:
+                  printf("Failed reading remaining data\n");
+                  return;
+              }
               fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
             } 
             else 
@@ -316,16 +385,16 @@ int main()
     return;
   }
 
-  if(SSL_connect(chat_ssl) < 1)
+  /* Do the handshake with the server */
+  while ((ret = SSL_connect(chat_ssl)) != 1)
   {
-    perror("client: Failed to connect to server");
-
-    if(SSL_get_verify_result(chat_ssl) != X509_V_OK)
-    {
-      fprintf(stderr, "Verify error: %s\n", X509_verify_cert_error_string(SSL_get_verify_result(chat_ssl)));
-    }
+    if (handle_io_failure(chat_ssl, ret) == 1)
+      continue;
+    printf("Failed to connect to server\n");
     return;
   }
+
+  char writeBuf[MAX];
 
 	for(;;) {
 
@@ -341,17 +410,26 @@ int main()
 			if (FD_ISSET(STDIN_FILENO, &readset)) {
 				if (1 == scanf(" %100[^\t\n]", s)) { /* reads until there is a tab or new line and up to 100 characters */
 					/* Send the user's message to the server */
-          char s1[MAX] = {'\0'};
-          int n = snprintf(s1, MAX, "%s", s);
-					ssize_t nwrite = SSL_write(chat_ssl, s1, n);
+          int n = snprintf(writeBuf, MAX, "%s", s);
+
+					ssize_t nwrite = SSL_write(chat_ssl, writeBuf, n);
+
+          if(nwrite <= 0)
+          {
+            if (handle_io_failure(directory_ssl, 0) != 1)
+            {
+              fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
+              SSL_free(directory_ssl);
+              SSL_free(chat_ssl);
+              SSL_CTX_free(ctx);
+              return;
+            }
+          }
+
           /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
           Deletes the current "Enter message: " string when typing in a chat message */
           fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
           fprintf(stderr, "\x1b[2K"); //Delete content on this line
-         
-          if(nwrite <= 0) {
-					  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-          }
 				} else {
 					fprintf(stderr, "%s:%d Error reading or parsing user input\n", __FILE__, __LINE__); //DEBUG
 				}
@@ -362,7 +440,26 @@ int main()
         ssize_t nread = SSL_read(chat_ssl, s, MAX);
         if (nread <= 0) {
           /* Not every error is fatal. Check the return value and act accordingly. */
-          fprintf(stderr, "%s:%d Error reading from server\n", __FILE__, __LINE__); //DEBUG
+          switch (handle_io_failure(chat_ssl, 0)) {
+            case: 1
+              continue;
+            case: 0
+              error("Error: Connection closed by directory")
+              SSL_free(directory_ssl);
+              SSL_free(chat_ssl);
+              SSL_CTX_free(ctx);
+              return;
+            case: -1
+              perror("Error: System error")
+              SSL_free(directory_ssl);
+              SSL_free(chat_ssl);
+              SSL_CTX_free(ctx);
+              return;
+            default:
+              printf("Failed reading remaining data\n");
+              return;
+            }
+            fprintf(stderr, "%s:%d Error reading from chat server\n", __FILE__, __LINE__); //DEBUG
         } else {
           /* Also found from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
           Removes "Enter message: " string and resets cursor when recieving data based on another client's input */

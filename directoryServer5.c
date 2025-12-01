@@ -211,11 +211,9 @@ int main(int argc, char **argv)
             continue;
           }         
           
-          fprintf(stderr, "before c check");
           if (s[0] == 'c') { //reading from a client            
             if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
             {
-              fprintf(stderr, "Inside c check");
               int index = 0;
               int n = 0;
               char s1[MAX * 10] = {'\0'};
@@ -231,7 +229,6 @@ int main(int argc, char **argv)
                   index++;
                 }
               }
-              fprintf(stderr, "Before index check");
               if(index == 0)
               {
                 n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
@@ -243,9 +240,7 @@ int main(int argc, char **argv)
                 offset += n;
               }
               
-              fprintf(stderr, "Before no chats write");
               ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
-              fprintf(stderr, "After no chats write, %d", nwrite);
               if(nwrite <= 0) {
                 fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
               }
