@@ -47,7 +47,7 @@ int main()
 {
 	int				sockfd, dir_sockfd;
 	struct sockaddr_in chat_serv_addr, dir_serv_addr;
-	fd_set			readset;
+	fd_set			readset, writeset;
   char ip_address[100];
   char chat_server_selection[MAX];
   int port = 0;
@@ -102,10 +102,11 @@ int main()
 		return EXIT_FAILURE;
 	}
 
+  //Make the socket nonblocking
   if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
     perror("server: couldn't set directory socket to nonblocking");
     close(dir_sockfd);
-    return; // Keep going through the for loop, from the beginning
+    return;
   }
 
 	/* Connect to the server. */
@@ -326,7 +327,7 @@ int main()
     }
     else
     {
-      fprintf(stderr,"Please try again later!");
+      fprintf(stderr,"Please try again later!\n");
       exit(1);
     }
   } 
@@ -406,6 +407,9 @@ int main()
 		FD_ZERO(&readset);
 		FD_SET(STDIN_FILENO, &readset);
 		FD_SET(sockfd, &readset);
+    if (strnlen(writeBuf, MAX) > 0){
+		  FD_SET(sockfd, &writeset);
+    }
 
 		if (select(sockfd+1, &readset, NULL, NULL, NULL) > 0)
 		{
@@ -416,29 +420,35 @@ int main()
 				if (1 == scanf(" %100[^\t\n]", s)) { /* reads until there is a tab or new line and up to 100 characters */
 					/* Send the user's message to the server */
           int n = snprintf(writeBuf, MAX, "%s", s);
-
-					ssize_t nwrite = SSL_write(chat_ssl, writeBuf, n);
-
-          if(nwrite <= 0)
-          {
-            if (handle_io_failure(directory_ssl, 0) != 1)
-            {
-              fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
-              SSL_free(directory_ssl);
-              SSL_free(chat_ssl);
-              SSL_CTX_free(ctx);
-              return;
-            }
-          }
-
-          /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
-          Deletes the current "Enter message: " string when typing in a chat message */
-          fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
-          fprintf(stderr, "\x1b[2K"); //Delete content on this line
 				} else {
 					fprintf(stderr, "%s:%d Error reading or parsing user input\n", __FILE__, __LINE__); //DEBUG
 				}
 			}
+
+      if (FD_ISSET(sockfd, &writeset)){
+        ssize_t nwrite = SSL_write(chat_ssl, writeBuf, MAX);
+
+        if(nwrite <= 0)
+        {
+          if (handle_io_failure(directory_ssl, 0) != 1)
+          {
+            fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
+            SSL_free(directory_ssl);
+            SSL_free(chat_ssl);
+            SSL_CTX_free(ctx);
+            return;
+          }
+        }
+        else
+        {
+          writeBuf[0] = '\0';
+        }
+
+        /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
+        Deletes the current "Enter message: " string when typing in a chat message */
+        fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
+        fprintf(stderr, "\x1b[2K"); //Delete content on this line
+      }
 
 			/* Check whether there's a message from the server to read */
 			if (FD_ISSET(sockfd, &readset)) {
