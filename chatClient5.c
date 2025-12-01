@@ -102,12 +102,17 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-
+  if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
+    perror("server: couldn't set directory socket to nonblocking");
+    close(dir_sockfd);
+    return; // Keep going through the for loop, from the beginning
+  }
 
 	/* Connect to the server. */
 	if (connect(dir_sockfd, (struct sockaddr *) &dir_serv_addr, sizeof(dir_serv_addr)) < 0) {
 		perror("client: can't connect to directory server");
-		return EXIT_FAILURE;
+    if (errno != EINPROGRESS)
+		  return EXIT_FAILURE;
 	}
 
   BIO *bio;
@@ -142,7 +147,7 @@ int main()
     if (handle_io_failure(directory_ssl, ret) == 1)
       continue;
     printf("Failed to connect to server\n");
-    return
+    return;
   }
 
 	/* Your directory server logic here... */ 
@@ -176,15 +181,15 @@ int main()
           { 
             /* Not every error is fatal. Check the return value and act accordingly. */
             switch (handle_io_failure(directory_ssl, 0)) {
-              case: 1
+              case 1:
                 continue;
-              case: 0
-                error("Error: Connection closed by directory")
+              case 0:
+                perror("Error: Connection closed by directory");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
                 return;
-              case: -1
-                perror("Error: System error")
+              case -1:
+                perror("Error: System error");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
                 return;
@@ -280,15 +285,15 @@ int main()
             {
               /* Not every error is fatal. Check the return value and act accordingly. */
               switch (handle_io_failure(directory_ssl, 0)) {
-                case: 1
+                case 1:
                   continue;
-                case: 0
-                  error("Error: Connection closed by directory")
+                case 0:
+                  perror("Error: Connection closed by directory");
                   SSL_free(directory_ssl);
                   SSL_CTX_free(ctx);
                   return;
-                case: -1
-                  perror("Error: System error")
+                case -1:
+                  perror("Error: System error");
                   SSL_free(directory_ssl);
                   SSL_CTX_free(ctx);
                   return;
@@ -441,16 +446,16 @@ int main()
         if (nread <= 0) {
           /* Not every error is fatal. Check the return value and act accordingly. */
           switch (handle_io_failure(chat_ssl, 0)) {
-            case: 1
+            case 1:
               continue;
-            case: 0
-              error("Error: Connection closed by directory")
+            case 0:
+              perror("Error: Connection closed by directory");
               SSL_free(directory_ssl);
               SSL_free(chat_ssl);
               SSL_CTX_free(ctx);
               return;
-            case: -1
-              perror("Error: System error")
+            case -1:
+              perror("Error: System error");
               SSL_free(directory_ssl);
               SSL_free(chat_ssl);
               SSL_CTX_free(ctx);
