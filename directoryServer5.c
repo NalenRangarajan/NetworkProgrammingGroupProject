@@ -142,6 +142,11 @@ int main(int argc, char **argv)
           continue;
         }
         BIO* client_bio = BIO_pop(bio);
+        if (0 != fcntl(BIO_get_fd(client_bio), F_SETFL, O_NONBLOCK)) {
+          perror("server: couldn't set new client socket to nonblocking");
+          BIO_free(client_bio);
+          continue;
+        }
         fprintf(stderr, "New client connection accepted\n");
         SSL* ssl;
         if((ssl = SSL_new(ctx)) == NULL)
