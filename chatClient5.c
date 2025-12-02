@@ -231,7 +231,7 @@ int main()
         if(sscanf(server_info, "%d. Name: %99[^,]", &id, name) == 2)
         {
           int len = strnlen(name, MAX);
-          strncpy(server_names[id], name, MAX - 1);
+          snprintf(server_names[id], MAX, "%s", name);
           server_names[id][len-1] = '\0';
           server_names[id][MAX - 1] = '\0';
           server_count = id;

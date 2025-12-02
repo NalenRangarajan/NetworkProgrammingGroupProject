@@ -219,7 +219,7 @@ int main(int argc, char **argv)
         new_entry->name = NULL;
         new_entry->ipaddress = NULL;
         new_entry->ipaddress = malloc(MAX);
-        strncpy(new_entry->ipaddress, inet_ntoa(cli_addr.sin_addr), MAX);
+        snprintf(new_entry->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
         LIST_INSERT_HEAD(&head, new_entry, entries);
         snprintf(new_entry->writeBuf, 17, "Chat directory:\n");
       }
