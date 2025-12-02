@@ -11,10 +11,43 @@
 #include "inet.h"
 #include "common.h"
 
+static int handle_io_failure(SSL *ssl, int res)
+{
+    switch (SSL_get_error(ssl, res)) {
+    case SSL_ERROR_WANT_READ:
+        /* Temporary failure. Wait until we can read and try again */
+        return 1;
+
+    case SSL_ERROR_WANT_WRITE:
+        /* Temporary failure. Wait until we can write and try again */
+        return 1;
+
+    case SSL_ERROR_ZERO_RETURN:
+        /* EOF */
+        return 0;
+
+    case SSL_ERROR_SYSCALL:
+        return -1;
+
+    case SSL_ERROR_SSL:
+        /*
+        * If the failure is due to a verification error we can get more
+        * information about it from SSL_get_verify_result().
+        */
+        if (SSL_get_verify_result(ssl) != X509_V_OK)
+            printf("Verify error: %s\n",
+                X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+        return -1;
+
+    default:
+        return -1;
+    }
+}
+
 int main(int argc, char **argv)
 {
 	struct sockaddr_in cli_addr, serv_addr, dir_serv_addr;
-	fd_set readset;
+	fd_set readset, writeset;
   int  usercount = 0;
 	int	 newsockfd;
   int  port;
@@ -24,6 +57,7 @@ int main(int argc, char **argv)
   struct entry {
     SSL* ssl;
     char* name;
+    char writeBuf[MAX];
     LIST_ENTRY(entry) entries;
   };
   
@@ -166,7 +200,7 @@ int main(int argc, char **argv)
       perror("Failed to load the server certificate chain file");
     }
 
-    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassAnime.crt", SSL_FILETYPE_PEM) <= 0)
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassAnime.key", SSL_FILETYPE_PEM) <= 0)
     {
       SSL_CTX_free(chat_ctx);
       ERR_print_errors_fp(stderr);
@@ -183,7 +217,7 @@ int main(int argc, char **argv)
       perror("Failed to load the server certificate chain file");
     }
 
-    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassSports.crt", SSL_FILETYPE_PEM) <= 0)
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassSports.key", SSL_FILETYPE_PEM) <= 0)
     {
       SSL_CTX_free(chat_ctx);
       ERR_print_errors_fp(stderr);
@@ -199,7 +233,7 @@ int main(int argc, char **argv)
       perror("Failed to load the server certificate chain file");
     }
 
-    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassVideoGames.crt", SSL_FILETYPE_PEM) <= 0)
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassVideoGames.key", SSL_FILETYPE_PEM) <= 0)
     {
       SSL_CTX_free(chat_ctx);
       ERR_print_errors_fp(stderr);
@@ -284,13 +318,28 @@ int main(int argc, char **argv)
   }
   
  	/* Register with the directory server */
-  char s_dir[MAX] = {'\0'};
-  int n_dir = snprintf(s_dir, MAX, "s%s %d", chatname, port);
-  ssize_t nwrite_dir = SSL_write(directory_ssl, s_dir, n_dir);
-  if(nwrite_dir < 0) {
-	  fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
-    exit(1);
+  for(;;)
+  {
+    FD_ZERO(&readset); 
+    FD_SET(STDIN_FILENO, &readset); 
+    FD_SET(dir_sockfd, &readset); 
+    if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) 
+    { 
+      char s_dir[MAX] = {'\0'};
+      int n_dir = snprintf(s_dir, MAX, "s%s %d", chatname, port);
+      while(!SSL_write(directory_ssl, s_dir, n_dir))
+      {
+        if (handle_io_failure(directory_ssl, 0) == 1)
+          continue; /* Retry */
+        fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
+        SSL_free(directory_ssl);
+        SSL_CTX_free(directory_ctx);
+        return;
+      }
+      break;
+    }
   }
+  
   
   for(;;) {
 
@@ -304,27 +353,48 @@ int main(int argc, char **argv)
       {
           char s_dir1[MAX] = {'\0'};
   				ssize_t nread = SSL_read(directory_ssl, s_dir1, MAX);
-  				if (nread <= 0) {
-  					/* Not every error is fatal. Check the return value and act accordingly. */
-  					fprintf(stderr, "%s:%d Error reading from server\n", __FILE__, __LINE__); //DEBUG
-  				}
-          s_dir1[nread] = '\0';
-          if(strncmp(s_dir1, "Connected!\n",11) == 0){
-  					fprintf(stderr, "%s", s_dir1);
-            break;
+  				if (nread <= 0) 
+          { 
+            /* Not every error is fatal. Check the return value and act accordingly. */
+            switch (handle_io_failure(directory_ssl, nread)) {
+              case 1:
+                break;
+              case 0:
+                perror("Error: Connection closed by directory");
+                SSL_free(directory_ssl);
+                SSL_CTX_free(directory_ctx);
+                return;
+              case -1:
+                perror("Error: System error");
+                SSL_free(directory_ssl);
+                SSL_CTX_free(directory_ctx);
+                return;
+              default:
+                printf("Failed reading remaining data\n");
+                return;
+            }
           }
-          /*
-          We want to quit reading when we see Connected!, but we will see Chat directory: first so we want to do nothing here 
-          */
-          else if(strncmp(s_dir1, "Chat directory:\n", MAX) == 0)
+          else 
           {
-          //do nothing
-          }
-          else
-          {
-  					fprintf(stderr, "%s", s_dir1);
-            exit(1);
-          }
+            s_dir1[nread] = '\0';
+            if(strncmp(s_dir1, "Connected!\n",11) == 0){
+              fprintf(stderr, "%s", s_dir1);
+              break;
+            }
+            /*
+            We want to quit reading when we see Connected!, but we will see Chat directory: first so we want to do nothing here 
+            */
+            else if(strncmp(s_dir1, "Chat directory:\n", MAX) == 0)
+            {
+            //do nothing
+            }
+            else
+            {
+              fprintf(stderr, "%s", s_dir1);
+              exit(1);
+            }
+          } 
+          
        }
 		}
 	}
@@ -359,8 +429,9 @@ int main(int argc, char **argv)
 	for (;;) {
     //clear error stack
     ERR_clear_error();
-    /* Initialize and populate your readset and compute maxfd */
+    /* Initialize and populate your readset and writeset and compute maxfd */
 		FD_ZERO(&readset);
+    FD_ZERO(&writeset);
 		FD_SET(sockfd, &readset);
 		/* We won't write to a listening socket so no need to add it to the writeset */
 		int max_fd = sockfd;
@@ -369,12 +440,17 @@ int main(int argc, char **argv)
     LIST_FOREACH(cli, &head, entries)
     {
       FD_SET(SSL_get_fd(cli->ssl), &readset);
+
+      if(strnlen(cli->writeBuf, MAX) > 0)
+      {
+        FD_SET(SSL_get_fd(cli->ssl), &writeset);
+      }
       
 		  /* Compute max_fd as you go */
 		  if (max_fd < SSL_get_fd(cli->ssl)) {max_fd = SSL_get_fd(cli->ssl);}
     }
    
-    if (select(max_fd+1, &readset, NULL, NULL, NULL) > 0) {
+    if (select(max_fd+1, &readset, &writeset, NULL, NULL) > 0) {
 
 			/* Check to see if our listening socket has a pending connection */
 			if (FD_ISSET(sockfd, &readset)) {
@@ -387,25 +463,34 @@ int main(int argc, char **argv)
           continue;
         }
         BIO* client_bio = BIO_pop(cli_bio);
+        if (0 != fcntl(BIO_get_fd(client_bio, NULL), F_SETFL, O_NONBLOCK)) {
+          perror("server: couldn't set new client socket to nonblocking");
+          BIO_free(client_bio);
+          continue;
+        }
 
         SSL* ssl;
         if((ssl = SSL_new(chat_ctx)) == NULL)
         {
           ERR_print_errors_fp(stderr);
           warnx("Error creating SSL handle for new connection");
-          BIO_free(cli_bio);
+          BIO_free(client_bio);
           continue;
         }
 
-        SSL_set_bio(ssl, cli_bio, cli_bio);
+        SSL_set_bio(ssl, client_bio, client_bio);
 
         //attempt handshake
-        if(SSL_accept(ssl) <= 0)
+        int ret;
+        if((ret = SSL_accept(ssl)) <= 0)
         {
-          ERR_print_errors_fp(stderr);
-          warnx("Error performing SSL handshake with client");
-          SSL_free(ssl);
-          continue;
+          if (handle_io_failure(ssl, ret) <= 0)
+          {
+            ERR_print_errors_fp(stderr);
+            warnx("Error performing SSL handshake with client");
+            SSL_free(ssl);
+            continue;
+          }
         }
         
         //Add new chat clients
@@ -414,45 +499,69 @@ int main(int argc, char **argv)
         new_entry->ssl = ssl;
         new_entry->name = NULL;
         LIST_INSERT_HEAD(&head, new_entry, entries);
-        
-        char s1[MAX] = {'\0'};
-        int n = snprintf(s1, MAX, "Enter a nickname: ");
-        ssize_t nwrite = SSL_write(new_entry->ssl, s1, n);
-        if(nwrite < 0) {
-				  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-        }
+        snprintf(new_entry->writeBuf, MAX, "Enter a nickname: ");
       }
       
       
-      LIST_FOREACH(cli, &head, entries)
+      cli = LIST_FIRST(&head);
+      while(cli != NULL)
       {
-  			if (FD_ISSET(SSL_get_fd(cli->ssl), &readset)) {
-  
+        struct entry *next = LIST_NEXT(cli, entries);
+  			if (FD_ISSET(SSL_get_fd(cli->ssl), &readset)) 
+        {
   				char s[MAX] = {'\0'};
   				ssize_t nread = SSL_read(cli->ssl, s, MAX);
   				if (nread <= 0) {
-  					/* Not every error is fatal. Check the return value and act accordingly. */
-  					close (SSL_get_fd(cli->ssl));
-            LIST_REMOVE(cli, entries);
-            if(cli->name)
-            {
-              char s1[MAX]= {'\0'};
-              int n = snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
-              LIST_FOREACH(clj, &head, entries)
-              {
-                ssize_t nwrite = SSL_write(clj->ssl, s1, n);
-                if(nwrite < 0) {
-      					  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
+            switch (handle_io_failure(cli->ssl, nread)) {
+              case 1:
+                cli = next;
+                break;
+              case 0:
+                perror("Client exit");
+                LIST_REMOVE(cli, entries);
+                if(cli->name)
+                {
+                  char s1[MAX]= {'\0'};
+                  int n = snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
+                  LIST_FOREACH(clj, &head, entries)
+                  {
+                    snprintf(clj->writeBuf, MAX, s1);
+                  }
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                    usercount--;
+                  }
+                  free(cli);
                 }
-              }
-              if(cli->name)
-              {
-                free(cli->name);
-                usercount--;
-              }
-              free(cli);
-              continue;
+                SSL_free(cli->ssl);
+                break;
+              case -1:
+                perror("Error: System error");
+                LIST_REMOVE(cli, entries);
+                if(cli->name)
+                {
+                  char s1[MAX]= {'\0'};
+                  int n = snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
+                  LIST_FOREACH(clj, &head, entries)
+                  {
+                    snprintf(clj->writeBuf, MAX, s1);
+                  }
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                    usercount--;
+                  }
+                  free(cli);
+                }
+                SSL_free(cli->ssl);
+                break;
+              default:
+                printf("Failed reading remaining data\n");
+                break;
             }
+  					/* Not every error is fatal. Check the return value and act accordingly. */
+  					
   				}
           
           if(cli->name == NULL) /* New login */
@@ -484,10 +593,7 @@ int main(int argc, char **argv)
               {
                 if(clj->name)
                 {
-                  ssize_t nwrite = SSL_write(clj->ssl, s1, n);
-                  if(nwrite < 0) {
-        					  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                  }
+                  snprintf(clj->writeBuf, MAX, s1);
                 }
               }
             }
@@ -495,10 +601,7 @@ int main(int argc, char **argv)
             {
               /* send signal to disconnect client */
               int n = snprintf(s1, MAX, "You entered a duplicate username. Please enter a new username.\nEnter nickname: ");
-              ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-              if(nwrite < 0) {
-    					  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-              }
+              snprintf(cli->writeBuf, MAX, s1);
             }
           }
           else /* Standard Message */
@@ -508,18 +611,59 @@ int main(int argc, char **argv)
             LIST_FOREACH(clj, &head, entries)
             {
     				  /* Send the reply to the clients */
-              ssize_t nwrite = SSL_write(clj->ssl, s1, n);
-              if(nwrite < 0) {
-    					  fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-              }
+              snprintf(clj->writeBuf, MAX, s1);
             }
           }
   			}
         else {
-  			  /* Handle select errors */
+  			  /* socket not in readset */
           continue; //try again
   		  }
   		}
+
+      cli = LIST_FIRST(&head);
+      while(cli != NULL)
+      {
+        struct entry *next = LIST_NEXT(cli, entries);
+        fprintf(stderr, "Inside writeset while");
+        if(FD_ISSET(SSL_get_fd(cli->ssl), &writeset)) 
+        {
+          fprintf(stderr, "In write section: %s",cli->writeBuf);
+          int nwrite = SSL_write(cli->ssl, cli->writeBuf, MAX);
+          if(nwrite < 1)
+          {
+            switch(handle_io_failure(cli->ssl, nwrite))
+            {
+              case 1:
+                cli = next;
+                break;
+              case 0:
+              case -1:
+                LIST_REMOVE(cli, entries);
+                SSL_free(cli->ssl);
+                if(cli->name)
+                {              
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                  }
+                  free(cli);
+                }
+                cli = next;
+                break;
+            }
+          }
+          else
+          {
+            cli->writeBuf[0] = '\0';
+            cli = next;
+          }
+        }
+        else
+        {
+          cli = next;
+        }
+      }
     }
 	}
 	// return or exit(0) is implied; no need to do anything because main() ends
