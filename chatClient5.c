@@ -111,9 +111,10 @@ int main()
 
 	/* Connect to the server. */
 	if (connect(dir_sockfd, (struct sockaddr *) &dir_serv_addr, sizeof(dir_serv_addr)) < 0) {
-		perror("client: can't connect to directory server");
-    if (errno != EINPROGRESS)
-		  return EXIT_FAILURE;
+    if (errno != EINPROGRESS) {
+      perror("client: can't connect to directory server");
+      return EXIT_FAILURE;
+    }
 	}
 
   BIO *bio;
@@ -171,25 +172,28 @@ int main()
 
     for(;;) //read until server response 
     { 
+      FD_ZERO(&readset); 
+      FD_SET(STDIN_FILENO, &readset); 
+      FD_SET(dir_sockfd, &readset);
       if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) 
       { 
         if (FD_ISSET(dir_sockfd, &readset)) 
         { 
           int p_result;
-          ssize_t nread = SSL_read(directory_ssl, s_d1, MAX); 
-          fprintf(stderr, "%s", s_d1);
+          ssize_t nread = SSL_read(directory_ssl, s_d1, MAX);
           if (nread <= 0) 
           { 
             /* Not every error is fatal. Check the return value and act accordingly. */
-            switch (handle_io_failure(directory_ssl, 0)) {
+            switch (handle_io_failure(directory_ssl, nread)) {
               case 1:
-                continue;
+                break;
               case 0:
                 perror("Error: Connection closed by directory");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
                 return;
               case -1:
+                fprintf(stderr, "This system error\n");
                 perror("Error: System error");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
@@ -198,7 +202,6 @@ int main()
                 printf("Failed reading remaining data\n");
                 return;
             }
-            fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
           } 
           else 
           {
@@ -214,7 +217,7 @@ int main()
       } 
     }
     //Read all online chats
-    if(strncmp(s_d1, "No chats online\n", MAX * 10) != 0) 
+    if(strncmp(s_d1, "No chats online", MAX * 10) != 0) 
     {
       int server_count = -1;
       char server_info[MAX * 2];
@@ -285,7 +288,7 @@ int main()
             if(nread <= 0) 
             {
               /* Not every error is fatal. Check the return value and act accordingly. */
-              switch (handle_io_failure(directory_ssl, 0)) {
+              switch (handle_io_failure(directory_ssl, nread)) {
                 case 1:
                   continue;
                 case 0:
@@ -357,6 +360,13 @@ int main()
 		return EXIT_FAILURE;
 	}
 
+    //Make the socket nonblocking
+  if (0 != fcntl(sockfd, F_SETFL, O_NONBLOCK)) {
+    perror("server: couldn't set directory socket to nonblocking");
+    close(dir_sockfd);
+    return;
+  }
+
 	/* Connect to the server. */
 	if (connect(sockfd, (struct sockaddr *) &chat_serv_addr, sizeof(chat_serv_addr)) < 0) {
 		perror("client: can't connect to server");
@@ -390,7 +400,6 @@ int main()
     perror("client: Failed to set certificate verification hostname");
     return;
   }
-
   /* Do the handshake with the server */
   while ((ret = SSL_connect(chat_ssl)) != 1)
   {
@@ -405,6 +414,7 @@ int main()
 	for(;;) {
 
 		FD_ZERO(&readset);
+		FD_ZERO(&writeset);
 		FD_SET(STDIN_FILENO, &readset);
 		FD_SET(sockfd, &readset);
     if (strnlen(writeBuf, MAX) > 0){
@@ -430,7 +440,7 @@ int main()
 
         if(nwrite <= 0)
         {
-          if (handle_io_failure(directory_ssl, 0) != 1)
+          if (handle_io_failure(chat_ssl, 0) != 1)
           {
             fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
             SSL_free(directory_ssl);
@@ -455,7 +465,7 @@ int main()
         ssize_t nread = SSL_read(chat_ssl, s, MAX);
         if (nread <= 0) {
           /* Not every error is fatal. Check the return value and act accordingly. */
-          switch (handle_io_failure(chat_ssl, 0)) {
+          switch (handle_io_failure(chat_ssl, nread)) {
             case 1:
               continue;
             case 0:

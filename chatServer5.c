@@ -86,7 +86,7 @@ int main(int argc, char **argv)
   //If command line args were correctly input
   if(argc == 3)
   {
-    snprintf(chatname, "%s", argv[1]);
+    snprintf(chatname, MAX, "%s", argv[1]);
     if(sscanf(argv[2], "%d", &port) == 1)
     {
       if( port > 49151 && port < 65536 && port != SERV_TCP_PORT)
@@ -156,50 +156,62 @@ int main(int argc, char **argv)
   options = SSL_OP_IGNORE_UNEXPECTED_EOF;
 
   SSL_CTX_set_options(chat_ctx, options);
-  
-  char filename1[100];
-  
-  char filename2[100];
 
   if(strncmp(chatname, "Anime", MAX) == 0)
   {
-    snprintf(filename1, "Anime.crt", MAX);
+    if(SSL_CTX_use_certificate_chain_file(chat_ctx, "anime.crt") <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Failed to load the server certificate chain file");
+    }
 
-
-    snprintf(filename2, "noPassAnime.key", MAX);
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassAnime.crt", SSL_FILETYPE_PEM) <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Error loading server private key file");
+    }
   }
   else if(strncmp(chatname, "Sports", MAX) == 0)
   {
-    snprintf(filename1, "Sports.crt", MAX);
 
+    if(SSL_CTX_use_certificate_chain_file(chat_ctx, "sports.crt") <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Failed to load the server certificate chain file");
+    }
 
-    snprintf(filename2, "noPassSports.key", MAX);
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassSports.crt", SSL_FILETYPE_PEM) <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Error loading server private key file");
+    }
   }
   else if(strncmp(chatname, "Video Games", MAX) == 0)
   {
-    snprintf(filename1, "VideoGames.crt", MAX);
+    if(SSL_CTX_use_certificate_chain_file(chat_ctx, "videoGames.crt") <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Failed to load the server certificate chain file");
+    }
 
-
-    snprintf(filename2, "noPassVideoGames.key", MAX);
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassVideoGames.crt", SSL_FILETYPE_PEM) <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Error loading server private key file");
+    }
   }
   else
   {
     return;
   }
 
-  if(SSL_CTX_use_certificate_chain_file(chat_ctx, filename1) <= 0)
-  {
-    SSL_CTX_free(chat_ctx);
-    ERR_print_errors_fp(stderr);
-    perror("Failed to load the server certificate chain file");
-  }
-
-  if(SSL_CTX_use_PrivateKey_file(chat_ctx, filename2, SSL_FILETYPE_PEM) <= 0)
-  {
-    SSL_CTX_free(chat_ctx);
-    ERR_print_errors_fp(stderr);
-    perror("Error loading server private key file");
-  }
+  
 
 	/* Bind socket to local address */
 	memset((char *) &serv_addr, 0, sizeof(serv_addr));

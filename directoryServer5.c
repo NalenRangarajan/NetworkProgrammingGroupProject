@@ -11,10 +11,44 @@
 #include "inet.h"
 #include "common.h"
 
+static int handle_io_failure(SSL *ssl, int res)
+{
+    switch (SSL_get_error(ssl, res)) {
+    case SSL_ERROR_WANT_READ:
+        /* Temporary failure. Wait until we can read and try again */
+        return 1;
+
+    case SSL_ERROR_WANT_WRITE:
+        /* Temporary failure. Wait until we can write and try again */
+        return 1;
+
+    case SSL_ERROR_ZERO_RETURN:
+        /* EOF */
+        return 0;
+
+    case SSL_ERROR_SYSCALL:
+        return -1;
+
+    case SSL_ERROR_SSL:
+        /*
+        * If the failure is due to a verification error we can get more
+        * information about it from SSL_get_verify_result().
+        */
+        if (SSL_get_verify_result(ssl) != X509_V_OK)
+            printf("Verify error: %s\n",
+                X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+        return -1;
+
+    default:
+        return -1;
+    }
+}
+
+
 int main(int argc, char **argv)
 {
 	struct sockaddr_in cli_addr, serv_addr;
-	fd_set readset;
+	fd_set readset, writeset;
 	int	 newsockfd;
   uint64_t options;
  
@@ -23,6 +57,7 @@ int main(int argc, char **argv)
     char* ipaddress;
     int portnum;
     char* name;
+    char writeBuf[MAX];
     LIST_ENTRY(entry) entries;
   };
   
@@ -116,6 +151,7 @@ int main(int argc, char **argv)
     ERR_clear_error();
     /* Initialize and populate your readset and compute maxfd */
 		FD_ZERO(&readset);
+    FD_ZERO(&writeset);
 		FD_SET(sockfd, &readset);
 		/* We won't write to a listening socket so no need to add it to the writeset */
 		int max_fd = sockfd;
@@ -124,13 +160,17 @@ int main(int argc, char **argv)
     LIST_FOREACH(cli, &head, entries)
     {
       FD_SET(SSL_get_fd(cli->ssl), &readset);
+
+      if(strnlen(cli->writeBuf, MAX) > 0)
+      {
+        FD_SET(SSL_get_fd(cli->ssl), &writeset);
+      }
       
 		  /* Compute max_fd as you go */
 		  if (max_fd < SSL_get_fd(cli->ssl)) {max_fd = SSL_get_fd(cli->ssl);}
     }
     
-    if (select(max_fd+1, &readset, NULL, NULL, NULL) > 0) {
-
+    if (select(max_fd+1, &readset, &writeset, NULL, NULL) > 0) {
 			/* Check to see if our listening socket has a pending connection */
 			if (FD_ISSET(sockfd, &readset)) {
 				/* Accept a new connection request */
@@ -142,7 +182,7 @@ int main(int argc, char **argv)
           continue;
         }
         BIO* client_bio = BIO_pop(bio);
-        if (0 != fcntl(BIO_get_fd(client_bio), F_SETFL, O_NONBLOCK)) {
+        if (0 != fcntl(BIO_get_fd(client_bio, NULL), F_SETFL, O_NONBLOCK)) {
           perror("server: couldn't set new client socket to nonblocking");
           BIO_free(client_bio);
           continue;
@@ -160,12 +200,16 @@ int main(int argc, char **argv)
         SSL_set_bio(ssl, client_bio, client_bio);
 
         //attempt handshake
-        if(SSL_accept(ssl) <= 0)
+        int ret;
+        if((ret = SSL_accept(ssl)) <= 0)
         {
-          ERR_print_errors_fp(stderr);
-          warnx("Error performing SSL handshake with client");
-          SSL_free(ssl);
-          continue;
+          if (handle_io_failure(ssl, ret) <= 0)
+          {
+            ERR_print_errors_fp(stderr);
+            warnx("Error performing SSL handshake with client");
+            SSL_free(ssl);
+            continue;
+          }
         }
         
         //Create Chat Server entry
@@ -177,11 +221,7 @@ int main(int argc, char **argv)
         new_entry->ipaddress = malloc(MAX);
         strncpy(new_entry->ipaddress, inet_ntoa(cli_addr.sin_addr), MAX);
         LIST_INSERT_HEAD(&head, new_entry, entries);
-        ssize_t nwrite = SSL_write(new_entry->ssl, "Chat directory:\n", 17); 
-        if(nwrite <= 0) 
-        { 
-          fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG }
-        }
+        snprintf(new_entry->writeBuf, 17, "Chat directory:\n");
       }
 
 		  /* Iterate through your client and server sockets */
@@ -198,23 +238,51 @@ int main(int argc, char **argv)
           fprintf(stderr, "Read %d\n", nread);
           if (nread <= 0) {
             /* Not every error is fatal. Check the return value and act accordingly. */
-            SSL_free(cli->ssl);
-            LIST_REMOVE(cli, entries);
-            if(cli->name)
-            {              
-              if(cli->name)
-              {
-                free(cli->name);
-              }
-              if(cli->ipaddress)
-              {
-                free(cli->ipaddress);
-              }
-              free(cli);
-            }
-            cli = next;
-            continue;
-          }         
+            switch (handle_io_failure(cli->ssl, nread)) {
+              case 1:
+                cli = next;
+                break;
+              case 0:
+                perror("Client exit");
+                SSL_free(cli->ssl);
+                LIST_REMOVE(cli, entries);
+                if(cli->name)
+                {              
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                  }
+                  if(cli->ipaddress)
+                  {
+                    free(cli->ipaddress);
+                  }
+                  free(cli);
+                }
+                cli = next;
+                break;
+              case -1:
+                perror("Error: System error");
+                SSL_free(cli->ssl);
+                LIST_REMOVE(cli, entries);
+                if(cli->name)
+                {              
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                  }
+                  if(cli->ipaddress)
+                  {
+                    free(cli->ipaddress);
+                  }
+                  free(cli);
+                }
+                cli = next;
+                break;
+              default:
+                printf("Failed reading remaining data\n");
+                break;
+            }   
+          }      
           
           if (s[0] == 'c') { //reading from a client            
             if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
@@ -245,10 +313,11 @@ int main(int argc, char **argv)
                 offset += n;
               }
               
-              ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
+              snprintf(cli->writeBuf, offset, s1);
+              /*ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
               if(nwrite <= 0) {
                 fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-              }
+              }*/
             }
             else //client picks a chat
             {
@@ -265,20 +334,22 @@ int main(int argc, char **argv)
                     int n = 0;
                     char s1[MAX] = {'\0'};
                     n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
-                    ssize_t nwrite = SSL_write(cli->ssl, s1, n);
+                    snprintf(cli->writeBuf, n, s1);
+                    /*ssize_t nwrite = SSL_write(cli->ssl, s1, n);
                     if(nwrite <= 0) {
                       fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                    } 
+                    } */
                   }
                 }
                 if(found == 0)
                 {
                   char s1[MAX] = {'\0'};
                   int n = snprintf(s1, MAX, "fail");
-                  ssize_t nwrite = SSL_write(cli->ssl, s1, n);
+                  snprintf(cli->writeBuf, n, s1);
+                  /*ssize_t nwrite = SSL_write(cli->ssl, s1, n);
                   if(nwrite <= 0) {
                     fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                  }
+                  }*/
                 } 
               }
             }
@@ -302,10 +373,11 @@ int main(int argc, char **argv)
               }
               if(unique_name == 0)
               {
-                ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
+                snprintf(cli->writeBuf, MAX, "There is already a chat server with this name. Please try again!\n");
+                /*ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
                 if(nwrite <= 0) {
                   fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                }
+                }*/
                 SSL_free(cli->ssl);
                 LIST_REMOVE(cli, entries);
                 if(cli->name)
@@ -324,10 +396,11 @@ int main(int argc, char **argv)
               }
               else //Add server
               {
-                ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
+                snprintf(cli->writeBuf, MAX, "Connected!\n");
+                /*ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
                 if(nwrite <= 0) {
                   fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                }
+                }*/
                 cli->name = malloc(MAX);
                 snprintf(cli->name, MAX, "%s", temp_name);
                 cli->portnum = temp_port;
@@ -346,9 +419,59 @@ int main(int argc, char **argv)
         } 
         cli = next; 
       }
-    }
 
-		else {
+      
+      cli = LIST_FIRST(&head);
+      while(cli != NULL)
+      {
+        struct entry *next = LIST_NEXT(cli, entries);
+        fprintf(stderr, "Inside writeset while");
+        if(FD_ISSET(SSL_get_fd(cli->ssl), &writeset)) 
+        {
+          fprintf(stderr, "In write section: %s",cli->writeBuf);
+          int nwrite = SSL_write(cli->ssl, cli->writeBuf, MAX);
+          if(nwrite < 1)
+          {
+            switch(handle_io_failure(cli->ssl, nwrite))
+            {
+              case 1:
+                cli = next;
+                break;
+              case 0:
+              case -1:
+                LIST_REMOVE(cli, entries);
+                SSL_free(cli->ssl);
+                if(cli->name)
+                {              
+                  if(cli->name)
+                  {
+                    free(cli->name);
+                  }
+                  if(cli->ipaddress)
+                  {
+                    free(cli->ipaddress);
+                  }
+                  free(cli);
+                }
+                cli = next;
+                break;
+            }
+          }
+          else
+          {
+            cli->writeBuf[0] = '\0';
+            cli = next;
+          }
+        }
+        else
+        {
+          cli = next;
+        }
+      }
+      
+    }
+		else 
+    {
 			/* Handle select errors */
 		}
 	}
