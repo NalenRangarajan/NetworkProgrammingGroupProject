@@ -160,7 +160,7 @@ int main()
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
     int n = snprintf(s_d, MAX, "c\0"); 
-    while(!SSL_write(directory_ssl, s_d, n))
+    while(!SSL_write(directory_ssl, s_d, MAX))
     {
       if (handle_io_failure(directory_ssl, 0) == 1)
         continue; /* Retry */
@@ -258,7 +258,7 @@ int main()
 
             fprintf(stderr, s_d2);
             
-            while(!SSL_write(directory_ssl, s_d2, n))
+            while(!SSL_write(directory_ssl, s_d2, MAX))
             {
               loop = 1;
               if (handle_io_failure(directory_ssl, 0) == 1)
@@ -453,7 +453,7 @@ int main()
         }
         else
         {
-          snprintf(writeBuf, MAX, '\0');
+          writeBuf[0] = '\0';
         }
 
         /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 

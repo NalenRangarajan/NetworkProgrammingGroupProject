@@ -327,7 +327,7 @@ int main(int argc, char **argv)
     { 
       char s_dir[MAX] = {'\0'};
       int n_dir = snprintf(s_dir, MAX, "s%s %d", chatname, port);
-      while(!SSL_write(directory_ssl, s_dir, n_dir))
+      while(!SSL_write(directory_ssl, s_dir, MAX))
       {
         if (handle_io_failure(directory_ssl, 0) == 1)
           continue; /* Retry */
@@ -655,7 +655,7 @@ int main(int argc, char **argv)
           }
           else
           {
-            snprintf(cli->writeBuf, MAX, '\0');
+            cli->writeBuf[0] = '\0';
             cli = next;
           }
         }

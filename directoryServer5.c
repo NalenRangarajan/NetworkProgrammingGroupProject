@@ -37,7 +37,6 @@ static int handle_io_failure(SSL *ssl, int res)
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
-        return -1;
 
     default:
         return -1;
@@ -316,7 +315,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Hit this");
                 char server_name[MAX] = {'\0'};
                 //grab server name from client request
-                if(sscanf(s, "c%99[^\n]", server_name) == 1)
+                if(sscanf(s, "c%98[^\n]", server_name) == 1)
                 {
                   int found = 0;
                   fprintf(stderr, "%s", server_name);
@@ -326,9 +325,7 @@ int main(int argc, char **argv)
                     {
                       found = 1;
                       int n = 0;
-                      char s1[MAX] = {'\0'};
-                      n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
-                      snprintf(cli->writeBuf, n, s1);
+                      n = snprintf(cli->writeBuf, MAX, "%s %d",clj->ipaddress, clj->portnum);
                     }
                   }
                   if(found == 0)
@@ -439,7 +436,6 @@ int main(int argc, char **argv)
           }
           else
           {
-            snprintf(cli->writeBuf, MAX, '\0')
             cli->writeBuf[0] = '\0';
             cli = next;
           }
