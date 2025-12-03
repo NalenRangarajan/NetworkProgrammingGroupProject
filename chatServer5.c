@@ -242,7 +242,19 @@ int main(int argc, char **argv)
   }
   else
   {
-    return;
+    if(SSL_CTX_use_certificate_chain_file(chat_ctx, "anime.crt") <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Failed to load the server certificate chain file");
+    }
+
+    if(SSL_CTX_use_PrivateKey_file(chat_ctx, "noPassAnime.key", SSL_FILETYPE_PEM) <= 0)
+    {
+      SSL_CTX_free(chat_ctx);
+      ERR_print_errors_fp(stderr);
+      perror("Error loading server private key file");
+    }
   }
 
   
