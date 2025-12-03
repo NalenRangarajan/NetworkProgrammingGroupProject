@@ -412,7 +412,7 @@ int main()
   }
 
   char writeBuf[MAX];
-
+  snprintf(writeBuf, MAX, '\0');
 	for(;;) {
 
 		FD_ZERO(&readset);
@@ -453,7 +453,7 @@ int main()
         }
         else
         {
-          writeBuf[0] = '\0';
+          snprintf(writeBuf, MAX, '\0');
         }
 
         /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
