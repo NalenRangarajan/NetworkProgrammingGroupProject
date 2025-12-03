@@ -324,15 +324,13 @@ int main(int argc, char **argv)
                     if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
                     {
                       found = 1;
-                      int n = 0;
-                      n = snprintf(cli->writeBuf, MAX, "%s %d",clj->ipaddress, clj->portnum);
+                      fprintf(stderr, "Found selected server\n");
+                      snprintf(cli->writeBuf, MAX, "%s %d",clj->ipaddress, clj->portnum);
                     }
                   }
                   if(found == 0)
                   {
-                    char s1[MAX] = {'\0'};
-                    int n = snprintf(s1, MAX, "fail");
-                    snprintf(cli->writeBuf, n, s1);
+                    snprintf(cli->writeBuf, MAX, "fail");
                   } 
                 }
               }
@@ -392,9 +390,7 @@ int main(int argc, char **argv)
             else {
               snprintf(s, MAX, "Invalid request");
             }
-          }      
-          
-          
+          }
         } 
         cli = next; 
       }

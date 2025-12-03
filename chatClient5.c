@@ -36,7 +36,6 @@ static int handle_io_failure(SSL *ssl, int res)
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
-        return -1;
 
     default:
         return -1;
@@ -102,13 +101,6 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-  //Make the socket nonblocking
-  if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
-    perror("server: couldn't set directory socket to nonblocking");
-    close(dir_sockfd);
-    return;
-  }
-
 	/* Connect to the server. */
 	if (connect(dir_sockfd, (struct sockaddr *) &dir_serv_addr, sizeof(dir_serv_addr)) < 0) {
     if (errno != EINPROGRESS) {
@@ -116,6 +108,13 @@ int main()
       return EXIT_FAILURE;
     }
 	}
+
+  //Make the socket nonblocking
+  if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
+    perror("server: couldn't set directory socket to nonblocking");
+    close(dir_sockfd);
+    return;
+  }
 
   BIO *bio;
   //Create a BIO object
@@ -255,6 +254,7 @@ int main()
           {
             //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
+            snprintf(chat_server_selection, MAX, "%s", server_names[index]);
 
             fprintf(stderr, s_d2);
             
@@ -362,18 +362,18 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-    //Make the socket nonblocking
-  if (0 != fcntl(sockfd, F_SETFL, O_NONBLOCK)) {
-    perror("server: couldn't set directory socket to nonblocking");
-    close(dir_sockfd);
-    return;
-  }
-
 	/* Connect to the server. */
 	if (connect(sockfd, (struct sockaddr *) &chat_serv_addr, sizeof(chat_serv_addr)) < 0) {
 		perror("client: can't connect to server");
 		return EXIT_FAILURE;
 	}
+
+    //Make the socket nonblocking
+  if (0 != fcntl(sockfd, F_SETFL, O_NONBLOCK)) {
+    perror("server: couldn't set socket to nonblocking");
+    close(sockfd);
+    return;
+  }
 
   
   BIO *bio_chat;

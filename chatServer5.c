@@ -37,7 +37,6 @@ static int handle_io_failure(SSL *ssl, int res)
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
-        return -1;
 
     default:
         return -1;
@@ -291,6 +290,13 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+  //Make the socket nonblocking
+  if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
+    perror("server: couldn't set directory socket to nonblocking");
+    close(dir_sockfd);
+    return;
+  }
+
   BIO *dir_bio;
   //Create a BIO object
   dir_bio = BIO_new(BIO_s_socket());
@@ -317,15 +323,12 @@ int main(int argc, char **argv)
     perror("client: Failed to set certificate verification hostname");
     return;
   }
-
-  if(SSL_connect(directory_ssl) < 1)
+  int ret;
+  while((ret = SSL_connect(directory_ssl)) != 1)
   {
-    perror("client: Failed to connect to server");
-
-    if(SSL_get_verify_result(directory_ssl) != X509_V_OK)
-    {
-      fprintf(stderr, "Verify error: %s\n", X509_verify_cert_error_string(SSL_get_verify_result(directory_ssl)));
-    }
+    if (handle_io_failure(directory_ssl, ret) == 1)
+      continue;
+    printf("Failed to connect to server\n");
     return;
   }
   
@@ -526,7 +529,6 @@ int main(int argc, char **argv)
   				if (nread <= 0) {
             switch (handle_io_failure(cli->ssl, nread)) {
               case 1:
-                cli = next;
                 break;
               case 0:
                 perror("Client exit");
@@ -573,7 +575,6 @@ int main(int argc, char **argv)
                 break;
             }
   					/* Not every error is fatal. Check the return value and act accordingly. */
-  					
   				}
           
           if(cli->name == NULL) /* New login */
@@ -626,10 +627,11 @@ int main(int argc, char **argv)
               snprintf(clj->writeBuf, MAX, s1);
             }
           }
+          cli = next;
   			}
         else {
   			  /* socket not in readset */
-          continue; //try again
+          cli = next;
   		  }
   		}
 
