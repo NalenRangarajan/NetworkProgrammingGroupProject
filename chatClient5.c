@@ -232,6 +232,7 @@ int main()
         {
           int len = strnlen(name, MAX);
           snprintf(server_names[id], MAX, "%s", name);
+          fprintf(stderr, "Logged name: %s\n",server_names[id]);
           server_names[id][len-1] = '\0';
           server_names[id][MAX - 1] = '\0';
           server_count = id;
@@ -254,7 +255,8 @@ int main()
           {
             //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
-            snprintf(chat_server_selection, MAX, "c%s\n", server_names[index]);
+
+            fprintf(stderr, s_d2);
             
             while(!SSL_write(directory_ssl, s_d2, n))
             {
@@ -451,7 +453,7 @@ int main()
         }
         else
         {
-          writeBuf[0] = '\0';
+          snprintf(writeBuf, MAX, '\0');
         }
 
         /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 

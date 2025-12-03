@@ -655,7 +655,7 @@ int main(int argc, char **argv)
           }
           else
           {
-            cli->writeBuf[0] = '\0';
+            snprintf(cli->writeBuf, MAX, '\0');
             cli = next;
           }
         }

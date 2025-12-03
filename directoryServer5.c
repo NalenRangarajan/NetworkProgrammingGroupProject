@@ -217,8 +217,8 @@ int main(int argc, char **argv)
         new_entry = malloc(sizeof(struct entry));
         new_entry->ssl = ssl;
         new_entry->name = NULL;
-        new_entry->ipaddress = NULL;
-        new_entry->ipaddress = malloc(MAX);
+        new_entry->ipaddress = calloc(MAX, sizeof(char));
+        getpeername(SSL_get_fd(ssl), &cli_addr, &clilen);
         snprintf(new_entry->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
         LIST_INSERT_HEAD(&head, new_entry, entries);
         snprintf(new_entry->writeBuf, 17, "Chat directory:\n");
@@ -234,13 +234,10 @@ int main(int argc, char **argv)
   
   				char s[MAX] = {'\0'};
           ssize_t nread = SSL_read(cli->ssl, s, MAX);
-          fprintf(stderr, "%s", s);
-          fprintf(stderr, "Read %d\n", nread);
           if (nread <= 0) {
             /* Not every error is fatal. Check the return value and act accordingly. */
             switch (handle_io_failure(cli->ssl, nread)) {
               case 1:
-                cli = next;
                 break;
               case 0:
                 perror("Client exit");
@@ -258,7 +255,6 @@ int main(int argc, char **argv)
                   }
                   free(cli);
                 }
-                cli = next;
                 break;
               case -1:
                 perror("Error: System error");
@@ -276,146 +272,132 @@ int main(int argc, char **argv)
                   }
                   free(cli);
                 }
-                cli = next;
                 break;
               default:
                 printf("Failed reading remaining data\n");
                 break;
             }   
-          }      
-          
-          if (s[0] == 'c') { //reading from a client            
-            if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
-            {
-              int index = 0;
-              int n = 0;
-              char s1[MAX * 10] = {'\0'};
-              ssize_t offset = 0;
-              LIST_FOREACH(clj, &head, entries)
+          }
+          else{
+            fprintf(stderr, "Recieving message: %s\n", s);
+            if (s[0] == 'c') { //reading from a client     
+              if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
               {
-                //write all active servers into the s1 buffer
-                if(clj->name && clj->ipaddress)
+                int index = 0;
+                int n = 0;
+                char s1[MAX * 10] = {'\0'};
+                ssize_t offset = 0;
+                LIST_FOREACH(clj, &head, entries)
                 {
-                  n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
-                  
+                  //write all active servers into the s1 buffer
+                  if(clj->name && clj->ipaddress)
+                  {
+                    n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
+                    
+                    offset += n;
+                    index++;
+                  }
+                }
+                if(index == 0)
+                {
+                  n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
                   offset += n;
-                  index++;
+                }
+                else
+                {
+                  n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
+                  offset += n;
+                }
+                
+                snprintf(cli->writeBuf, offset, s1);
+              }
+              else //client picks a chat
+              {
+                fprintf(stderr, "Hit this");
+                char server_name[MAX] = {'\0'};
+                //grab server name from client request
+                if(sscanf(s, "c%99[^\n]", server_name) == 1)
+                {
+                  int found = 0;
+                  fprintf(stderr, "%s", server_name);
+                  LIST_FOREACH(clj, &head, entries)
+                  {
+                    if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
+                    {
+                      found = 1;
+                      int n = 0;
+                      char s1[MAX] = {'\0'};
+                      n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
+                      snprintf(cli->writeBuf, n, s1);
+                    }
+                  }
+                  if(found == 0)
+                  {
+                    char s1[MAX] = {'\0'};
+                    int n = snprintf(s1, MAX, "fail");
+                    snprintf(cli->writeBuf, n, s1);
+                  } 
                 }
               }
-              if(index == 0)
+            }
+            else if (s[0] == 's') //reading from a server
+            {
+              char *s1 = calloc(1, strnlen(s, MAX) + 1);
+              snprintf(s1, strnlen(s, MAX), "%s", s + 1);
+              char temp_name[100];
+              int temp_port = 0;
+              //get name and port number from s
+              if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
               {
-                n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
-                offset += n;
+                fprintf(stderr, "Temp name: %s", temp_name);
+                int unique_name = 1;
+                LIST_FOREACH(clj, &head, entries)
+                {
+                  if(clj->name && strncmp(temp_name, clj->name, MAX) == 0)
+                  {
+                    unique_name = 0;
+                  }
+                }
+                if(unique_name == 0)
+                {
+                  snprintf(cli->writeBuf, MAX, "There is already a chat server with this name. Please try again!\n");
+                  SSL_free(cli->ssl);
+                  LIST_REMOVE(cli, entries);
+                  if(cli->name)
+                  {              
+                    if(cli->name)
+                    {
+                      free(cli->name);
+                    }
+                    if(cli->ipaddress)
+                    {
+                      free(cli->ipaddress);
+                    }
+                    free(cli);
+                    continue;
+                  }
+                }
+                else //Add server
+                {
+                  snprintf(cli->writeBuf, MAX, "Connected!\n");
+                  cli->name = malloc(MAX);
+                  snprintf(cli->name, MAX, "%s", temp_name);
+                  cli->portnum = temp_port;
+                  cli->ipaddress = malloc(MAX);
+                  snprintf(cli->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
+                }
               }
               else
               {
-                n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
-                offset += n;
-              }
-              
-              snprintf(cli->writeBuf, offset, s1);
-              /*ssize_t nwrite = SSL_write(cli->ssl, s1, offset);
-              if(nwrite <= 0) {
-                fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-              }*/
-            }
-            else //client picks a chat
-            {
-              char server_name[MAX] = {'\0'};
-              //grab server name from client request
-              if(sscanf(s, "c%99[^\n]", server_name) == 1)
-              {
-                int found = 0;
-                LIST_FOREACH(clj, &head, entries)
-                {
-                  if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
-                  {
-                    found = 1;
-                    int n = 0;
-                    char s1[MAX] = {'\0'};
-                    n = snprintf(s1, MAX, "%s %d",clj->ipaddress, clj->portnum);
-                    snprintf(cli->writeBuf, n, s1);
-                    /*ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                    if(nwrite <= 0) {
-                      fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                    } */
-                  }
-                }
-                if(found == 0)
-                {
-                  char s1[MAX] = {'\0'};
-                  int n = snprintf(s1, MAX, "fail");
-                  snprintf(cli->writeBuf, n, s1);
-                  /*ssize_t nwrite = SSL_write(cli->ssl, s1, n);
-                  if(nwrite <= 0) {
-                    fprintf(stderr, "%s:%d Error writing to client\n", __FILE__, __LINE__); //DEBUG
-                  }*/
-                } 
+                fprintf(stderr, "%s:%d Error parsing chat server arguments\n", __FILE__, __LINE__); //DEBUG
               }
             }
-          }
-          else if (s[0] == 's') //reading from a server
-          {
-            char *s1 = calloc(1, strnlen(s, MAX) + 1);
-            snprintf(s1, strnlen(s, MAX), "%s", s + 1);
-            char temp_name[100];
-            int temp_port = 0;
-            //get name and port number from s
-            if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
-            {
-              int unique_name = 1;
-              LIST_FOREACH(clj, &head, entries)
-              {
-                if(clj->name && strncmp(temp_name, clj->name, MAX) == 0)
-                {
-                  unique_name = 0;
-                }
-              }
-              if(unique_name == 0)
-              {
-                snprintf(cli->writeBuf, MAX, "There is already a chat server with this name. Please try again!\n");
-                /*ssize_t nwrite = SSL_write(cli->ssl, "There is already a chat server with this name. Please try again!\n", 63);
-                if(nwrite <= 0) {
-                  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                }*/
-                SSL_free(cli->ssl);
-                LIST_REMOVE(cli, entries);
-                if(cli->name)
-                {              
-                  if(cli->name)
-                  {
-                    free(cli->name);
-                  }
-                  if(cli->ipaddress)
-                  {
-                    free(cli->ipaddress);
-                  }
-                  free(cli);
-                  continue;
-                }
-              }
-              else //Add server
-              {
-                snprintf(cli->writeBuf, MAX, "Connected!\n");
-                /*ssize_t nwrite = SSL_write(cli->ssl, "Connected!\n", 11);
-                if(nwrite <= 0) {
-                  fprintf(stderr, "%s:%d Error writing to server\n", __FILE__, __LINE__); //DEBUG
-                }*/
-                cli->name = malloc(MAX);
-                snprintf(cli->name, MAX, "%s", temp_name);
-                cli->portnum = temp_port;
-                cli->ipaddress = malloc(MAX);
-                snprintf(cli->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
-              }
+            else {
+              snprintf(s, MAX, "Invalid request");
             }
-            else
-            {
-              fprintf(stderr, "%s:%d Error parsing chat server arguments\n", __FILE__, __LINE__); //DEBUG
-            }
-          }
-          else {
-            snprintf(s, MAX, "Invalid request");
-          }
+          }      
+          
+          
         } 
         cli = next; 
       }
@@ -425,10 +407,8 @@ int main(int argc, char **argv)
       while(cli != NULL)
       {
         struct entry *next = LIST_NEXT(cli, entries);
-        fprintf(stderr, "Inside writeset while");
         if(FD_ISSET(SSL_get_fd(cli->ssl), &writeset)) 
         {
-          fprintf(stderr, "In write section: %s",cli->writeBuf);
           int nwrite = SSL_write(cli->ssl, cli->writeBuf, MAX);
           if(nwrite < 1)
           {
@@ -459,6 +439,7 @@ int main(int argc, char **argv)
           }
           else
           {
+            snprintf(cli->writeBuf, MAX, '\0')
             cli->writeBuf[0] = '\0';
             cli = next;
           }
