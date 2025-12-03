@@ -458,8 +458,8 @@ int main()
 
         /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
         Deletes the current "Enter message: " string when typing in a chat message */
-        fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
-        fprintf(stderr, "\x1b[2K"); //Delete content on this line
+        //fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
+        //fprintf(stderr, "\x1b[2K"); //Delete content on this line
       }
 
 			/* Check whether there's a message from the server to read */
@@ -490,7 +490,8 @@ int main()
         } else {
           /* Also found from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
           Removes "Enter message: " string and resets cursor when recieving data based on another client's input */
-          fprintf(stderr, "\x1b[2K\r%s", s);
+          //fprintf(stderr, "\x1b[2K\r%s", s);
+          fprintf(stderr, "%s\n", s);
         }
 			}
 		}

@@ -220,7 +220,7 @@ int main(int argc, char **argv)
         getpeername(SSL_get_fd(ssl), &cli_addr, &clilen);
         snprintf(new_entry->ipaddress, MAX, "%s", inet_ntoa(cli_addr.sin_addr));
         LIST_INSERT_HEAD(&head, new_entry, entries);
-        snprintf(new_entry->writeBuf, 17, "Chat directory:\n");
+        snprintf(new_entry->writeBuf, MAX, "Chat directory:\n");
       }
 
 		  /* Iterate through your client and server sockets */
@@ -242,35 +242,17 @@ int main(int argc, char **argv)
                 perror("Client exit");
                 SSL_free(cli->ssl);
                 LIST_REMOVE(cli, entries);
-                if(cli->name)
-                {              
-                  if(cli->name)
-                  {
-                    free(cli->name);
-                  }
-                  if(cli->ipaddress)
-                  {
-                    free(cli->ipaddress);
-                  }
-                  free(cli);
-                }
+                if(cli->name) free(cli->name);
+                if(cli->ipaddress) free(cli->ipaddress);
+                free(cli);
                 break;
               case -1:
                 perror("Error: System error");
                 SSL_free(cli->ssl);
                 LIST_REMOVE(cli, entries);
-                if(cli->name)
-                {              
-                  if(cli->name)
-                  {
-                    free(cli->name);
-                  }
-                  if(cli->ipaddress)
-                  {
-                    free(cli->ipaddress);
-                  }
-                  free(cli);
-                }
+                if(cli->name) free(cli->name);
+                if(cli->ipaddress) free(cli->ipaddress);
+                free(cli);
                 break;
               default:
                 printf("Failed reading remaining data\n");
@@ -278,7 +260,6 @@ int main(int argc, char **argv)
             }   
           }
           else{
-            fprintf(stderr, "Recieving message: %s\n", s);
             if (s[0] == 'c') { //reading from a client     
               if(strnlen(s, MAX) == 1) //If client queries active chats then only 's' was sent
               {
@@ -308,23 +289,20 @@ int main(int argc, char **argv)
                   offset += n;
                 }
                 
-                snprintf(cli->writeBuf, offset, s1);
+                snprintf(cli->writeBuf, MAX, "%s", s1);
               }
               else //client picks a chat
               {
-                fprintf(stderr, "Hit this");
                 char server_name[MAX] = {'\0'};
                 //grab server name from client request
                 if(sscanf(s, "c%98[^\n]", server_name) == 1)
                 {
                   int found = 0;
-                  fprintf(stderr, "%s", server_name);
                   LIST_FOREACH(clj, &head, entries)
                   {
                     if(clj->name && strncmp(clj->name, server_name, strnlen(server_name, MAX)) == 0) //servers are only named entities
                     {
                       found = 1;
-                      fprintf(stderr, "Found selected server\n");
                       snprintf(cli->writeBuf, MAX, "%s %d",clj->ipaddress, clj->portnum);
                     }
                   }
@@ -344,7 +322,6 @@ int main(int argc, char **argv)
               //get name and port number from s
               if(sscanf(s1, "%99[^0-9] %d", temp_name, &temp_port) == 2)
               {
-                fprintf(stderr, "Temp name: %s", temp_name);
                 int unique_name = 1;
                 LIST_FOREACH(clj, &head, entries)
                 {
@@ -358,19 +335,10 @@ int main(int argc, char **argv)
                   snprintf(cli->writeBuf, MAX, "There is already a chat server with this name. Please try again!\n");
                   SSL_free(cli->ssl);
                   LIST_REMOVE(cli, entries);
-                  if(cli->name)
-                  {              
-                    if(cli->name)
-                    {
-                      free(cli->name);
-                    }
-                    if(cli->ipaddress)
-                    {
-                      free(cli->ipaddress);
-                    }
-                    free(cli);
-                    continue;
-                  }
+                  if(cli->name) free(cli->name);
+                  if(cli->ipaddress) free(cli->ipaddress);
+                  free(cli);
+                  continue;
                 }
                 else //Add server
                 {
@@ -414,18 +382,9 @@ int main(int argc, char **argv)
               case -1:
                 LIST_REMOVE(cli, entries);
                 SSL_free(cli->ssl);
-                if(cli->name)
-                {              
-                  if(cli->name)
-                  {
-                    free(cli->name);
-                  }
-                  if(cli->ipaddress)
-                  {
-                    free(cli->ipaddress);
-                  }
-                  free(cli);
-                }
+                if(cli->name) free(cli->name);
+                if(cli->ipaddress) free(cli->ipaddress);
+                free(cli);
                 cli = next;
                 break;
             }

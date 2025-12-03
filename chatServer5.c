@@ -576,80 +576,74 @@ int main(int argc, char **argv)
             }
   					/* Not every error is fatal. Check the return value and act accordingly. */
   				}
-          
-          if(cli->name == NULL) /* New login */
+          else
           {
-            int unique_name = 1;
-            char s1[MAX] = {'\0'};
-            LIST_FOREACH(clj, &head, entries)
+            if(cli->name == NULL) /* New login */
             {
-              if(clj->name && strncmp(s, clj->name, MAX) == 0)
+              int unique_name = 1;
+              char s1[MAX] = {'\0'};
+              LIST_FOREACH(clj, &head, entries)
               {
-                unique_name = 0;
+                if (clj->name && strncmp(s, clj->name, MAX) == 0)
+                {
+                  unique_name = 0;
+                }
               }
-            }
-            if(unique_name)
-            {
-              cli->name = malloc(MAX);
-              snprintf(cli->name, MAX, "%s", s);
-              usercount++;
-              int n = 0;
-              if(usercount == 1)
+              if(unique_name)
               {
-                n = snprintf(s1, MAX, "You are the first user to join the chat\nEnter message: ");
+                cli->name = malloc(MAX);
+                snprintf(cli->name, MAX, "%s", s);
+                usercount++;
+                int n = 0;
+                if(usercount == 1)
+                {
+                  n = snprintf(s1, MAX, "You are the first user to join the chat\nEnter message: ");
+                }
+                else
+                {
+                  n = snprintf(s1, MAX, "%s has joined the chat\nEnter message: ",cli->name);
+                }
+                LIST_FOREACH(clj, &head, entries)
+                {
+                  if(clj->name)
+                  {
+                    snprintf(clj->writeBuf, MAX, s1);
+                  }
+                }
               }
               else
               {
-                n = snprintf(s1, MAX, "%s has joined the chat\nEnter message: ",cli->name);
+                /* send signal to disconnect client */
+                snprintf(cli->writeBuf, MAX, "You entered a duplicate username. Please enter a new username.\nEnter nickname: ");
               }
+            }
+            else /* Standard Message */
+            {
+              char s1[MAX] = {'\0'};
+              int n = snprintf(s1, MAX, "%s: %s\nEnter message: ", cli->name, s);
               LIST_FOREACH(clj, &head, entries)
               {
-                if(clj->name)
-                {
-                  snprintf(clj->writeBuf, MAX, s1);
-                }
+                /* Send the reply to the clients */
+                snprintf(clj->writeBuf, MAX, s1);
               }
             }
-            else
-            {
-              /* send signal to disconnect client */
-              int n = snprintf(s1, MAX, "You entered a duplicate username. Please enter a new username.\nEnter nickname: ");
-              snprintf(cli->writeBuf, MAX, s1);
-            }
           }
-          else /* Standard Message */
-          {
-            char s1[MAX] = {'\0'};
-            int n = snprintf(s1, MAX, "%s: %s\nEnter message: ", cli->name, s);
-            LIST_FOREACH(clj, &head, entries)
-            {
-    				  /* Send the reply to the clients */
-              snprintf(clj->writeBuf, MAX, s1);
-            }
-          }
-          cli = next;
   			}
-        else {
-  			  /* socket not in readset */
-          cli = next;
-  		  }
+        cli = next;
   		}
 
       cli = LIST_FIRST(&head);
       while(cli != NULL)
       {
         struct entry *next = LIST_NEXT(cli, entries);
-        fprintf(stderr, "Inside writeset while");
         if(FD_ISSET(SSL_get_fd(cli->ssl), &writeset)) 
         {
-          fprintf(stderr, "In write section: %s",cli->writeBuf);
           int nwrite = SSL_write(cli->ssl, cli->writeBuf, MAX);
           if(nwrite < 1)
           {
             switch(handle_io_failure(cli->ssl, nwrite))
             {
               case 1:
-                cli = next;
                 break;
               case 0:
               case -1:
@@ -663,20 +657,15 @@ int main(int argc, char **argv)
                   }
                   free(cli);
                 }
-                cli = next;
                 break;
             }
           }
           else
           {
-            cli->writeBuf[0] = '\0';
-            cli = next;
+            snprintf(cli->writeBuf, MAX, '\0');
           }
         }
-        else
-        {
-          cli = next;
-        }
+        cli = next;
       }
     }
 	}
