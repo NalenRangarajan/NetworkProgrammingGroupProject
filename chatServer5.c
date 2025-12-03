@@ -533,6 +533,7 @@ int main(int argc, char **argv)
               case 0:
                 perror("Client exit");
                 LIST_REMOVE(cli, entries);
+                SSL_free(cli->ssl);
                 if(cli->name)
                 {
                   char s1[MAX]= {'\0'};
@@ -546,13 +547,13 @@ int main(int argc, char **argv)
                     free(cli->name);
                     usercount--;
                   }
-                  free(cli);
                 }
-                SSL_free(cli->ssl);
+                free(cli);
                 break;
               case -1:
                 perror("Error: System error");
                 LIST_REMOVE(cli, entries);
+                SSL_free(cli->ssl);
                 if(cli->name)
                 {
                   char s1[MAX]= {'\0'};
@@ -566,9 +567,8 @@ int main(int argc, char **argv)
                     free(cli->name);
                     usercount--;
                   }
-                  free(cli);
                 }
-                SSL_free(cli->ssl);
+                free(cli);
                 break;
               default:
                 printf("Failed reading remaining data\n");
@@ -619,12 +619,12 @@ int main(int argc, char **argv)
             }
             else /* Standard Message */
             {
-              char s1[MAX] = {'\0'};
-              int n = snprintf(s1, MAX, "%s: %s\nEnter message: ", cli->name, s);
+              // char s1[MAX];
+              // int n = snprintf(s1, MAX, "%s: %s\nEnter message: ", cli->name, s);
               LIST_FOREACH(clj, &head, entries)
               {
                 /* Send the reply to the clients */
-                snprintf(clj->writeBuf, MAX, s1);
+                snprintf(clj->writeBuf, MAX, "%s: %s\nEnter message: ", cli->name, s);
               }
             }
           }

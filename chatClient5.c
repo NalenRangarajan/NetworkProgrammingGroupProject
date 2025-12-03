@@ -231,7 +231,6 @@ int main()
         {
           int len = strnlen(name, MAX);
           snprintf(server_names[id], MAX, "%s", name);
-          fprintf(stderr, "Logged name: %s\n",server_names[id]);
           server_names[id][len-1] = '\0';
           server_names[id][MAX - 1] = '\0';
           server_count = id;
@@ -255,8 +254,6 @@ int main()
             //select server to join
             int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
             snprintf(chat_server_selection, MAX, "%s", server_names[index]);
-
-            fprintf(stderr, s_d2);
             
             while(!SSL_write(directory_ssl, s_d2, MAX))
             {
@@ -275,6 +272,10 @@ int main()
             fprintf(stderr,"\nPlease enter a valid index\n");
             loop = 1;
           }
+        }
+        else
+        {
+          scanf(" %99[^\t\n]", s_d2);
         }
       }
       
@@ -423,7 +424,7 @@ int main()
 		  FD_SET(sockfd, &writeset);
     }
 
-		if (select(sockfd+1, &readset, NULL, NULL, NULL) > 0)
+		if (select(sockfd+1, &readset, &writeset, NULL, NULL) > 0)
 		{
 			char s[MAX] = {'\0'};
 
@@ -458,8 +459,8 @@ int main()
 
         /* Following lines cited from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
         Deletes the current "Enter message: " string when typing in a chat message */
-        //fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
-        //fprintf(stderr, "\x1b[2K"); //Delete content on this line
+        fprintf(stderr, "\x1b[1F"); //Move cursor to previous line
+        fprintf(stderr, "\x1b[2K"); //Delete content on this line
       }
 
 			/* Check whether there's a message from the server to read */
@@ -490,8 +491,7 @@ int main()
         } else {
           /* Also found from https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences 
           Removes "Enter message: " string and resets cursor when recieving data based on another client's input */
-          //fprintf(stderr, "\x1b[2K\r%s", s);
-          fprintf(stderr, "%s\n", s);
+          fprintf(stderr, "\x1b[2K\r%s", s);
         }
 			}
 		}

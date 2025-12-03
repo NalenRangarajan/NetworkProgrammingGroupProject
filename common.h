@@ -11,6 +11,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define MAX 100
+#define MAX 1000
 
 #define MAX_CLIENTS 5

@@ -265,14 +265,14 @@ int main(int argc, char **argv)
               {
                 int index = 0;
                 int n = 0;
-                char s1[MAX * 10] = {'\0'};
+                char s1[MAX] = {'\0'};
                 ssize_t offset = 0;
                 LIST_FOREACH(clj, &head, entries)
                 {
                   //write all active servers into the s1 buffer
                   if(clj->name && clj->ipaddress)
                   {
-                    n = snprintf(s1 + offset, MAX * 10 - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
+                    n = snprintf(s1 + offset, MAX - offset, "%d. Name: %s, IP Address: %s, Port Number: %d\n", index, clj->name, clj->ipaddress, clj->portnum);
                     
                     offset += n;
                     index++;
@@ -280,12 +280,12 @@ int main(int argc, char **argv)
                 }
                 if(index == 0)
                 {
-                  n = snprintf(s1 + offset, MAX * 10 - offset, "No chats online\n");
+                  n = snprintf(s1 + offset, MAX - offset, "No chats online\n");
                   offset += n;
                 }
                 else
                 {
-                  n = snprintf(s1 + offset, MAX * 10 - offset, "Select server: ");
+                  n = snprintf(s1 + offset, MAX - offset, "Select server: ");
                   offset += n;
                 }
                 
