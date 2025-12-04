@@ -29,14 +29,17 @@ static int handle_io_failure(SSL *ssl, int res)
     case SSL_ERROR_SYSCALL:
         return -1;
 
+    /*
     case SSL_ERROR_SSL:
         /*
         * If the failure is due to a verification error we can get more
         * information about it from SSL_get_verify_result().
-        */
+        
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+
+    */
 
     default:
         return -1;
@@ -69,7 +72,7 @@ int main(int argc, char **argv)
   if(directory_ctx == NULL)
   {
     perror("chatServer: Failed to create the SSL_CTX");
-    return;
+    exit(1);
   }
 
   SSL_CTX_clear_mode(directory_ctx, SSL_MODE_AUTO_RETRY);
@@ -80,14 +83,14 @@ int main(int argc, char **argv)
   if(!SSL_CTX_set_default_verify_paths(directory_ctx))
   {
     perror("chatServer: Couldn't set default certificate store");
-    return;
+    exit(1);
   }
 
   //Ensure minimum TLS version
   if(!SSL_CTX_set_min_proto_version(directory_ctx, TLS1_3_VERSION))
   {
     perror("chatServer: Failed to set minimum TLS version");
-    return;
+    exit(1);
   }
 
   SSL_CTX_load_verify_locations(directory_ctx, "noPassRootCA.crt", NULL);
@@ -97,7 +100,7 @@ int main(int argc, char **argv)
   if(directory_ssl == NULL)
   {
     perror("client: Failed to create SSL object");
-    return;
+    exit(1);
   }
 
 
@@ -173,7 +176,7 @@ int main(int argc, char **argv)
   if(chat_ctx == NULL)
   {
     perror("Directory Server: Failed to create the SSL_CTX");
-    return;
+    exit(1);
   }
   
   SSL_CTX_clear_mode(chat_ctx, SSL_MODE_AUTO_RETRY);
@@ -182,7 +185,7 @@ int main(int argc, char **argv)
   if(!SSL_CTX_set_min_proto_version(chat_ctx, TLS1_3_VERSION))
   {
     perror("Directory Server: Failed to set minimum TLS version");
-    return;
+    exit(1);
   }
 
   //We are assuming that CPU exhaustion attacks will not occur so |= SSL_OP_No_RENEGOTIATION is not necessary
@@ -294,7 +297,7 @@ int main(int argc, char **argv)
   if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
     perror("server: couldn't set directory socket to nonblocking");
     close(dir_sockfd);
-    return;
+    exit(1);
   }
 
   BIO *dir_bio;
@@ -303,7 +306,7 @@ int main(int argc, char **argv)
   if(dir_bio == NULL)
   {
     BIO_closesocket(dir_sockfd);
-    return;
+    exit(1);
   }
 
   //Wrap socket with BIO object
@@ -315,13 +318,13 @@ int main(int argc, char **argv)
   if(!SSL_set_tlsext_host_name(directory_ssl, "Directory Server"))
   {
     perror("client: Failed to set SNI hostname");
-    return;
+    exit(1);
   }
 
   if(!SSL_set1_host(directory_ssl, "Directory Server"))
   {
     perror("client: Failed to set certificate verification hostname");
-    return;
+    exit(1);
   }
   int ret;
   while((ret = SSL_connect(directory_ssl)) != 1)
@@ -329,7 +332,7 @@ int main(int argc, char **argv)
     if (handle_io_failure(directory_ssl, ret) == 1)
       continue;
     printf("Failed to connect to server\n");
-    return;
+    exit(1);
   }
   
  	/* Register with the directory server */
@@ -349,7 +352,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
         SSL_free(directory_ssl);
         SSL_CTX_free(directory_ctx);
-        return;
+        exit(1);
       }
       break;
     }
@@ -378,15 +381,15 @@ int main(int argc, char **argv)
                 perror("Error: Connection closed by directory");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(directory_ctx);
-                return;
+                exit(1);
               case -1:
                 perror("Error: System error");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(directory_ctx);
-                return;
+                exit(1);
               default:
                 printf("Failed reading remaining data\n");
-                return;
+                exit(1);
             }
           }
           else 
@@ -426,7 +429,7 @@ int main(int argc, char **argv)
   if(cli_bio == NULL)
   {
     BIO_closesocket(sockfd);
-    return;
+    exit(1);
   }
 
   //Wrap socket with BIO object

@@ -29,14 +29,16 @@ static int handle_io_failure(SSL *ssl, int res)
     case SSL_ERROR_SYSCALL:
         return -1;
 
+    /* Commented out because it is only here for testing for the SSL Verification Error
     case SSL_ERROR_SSL:
         /*
         * If the failure is due to a verification error we can get more
         * information about it from SSL_get_verify_result().
-        */
+        
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+    */
 
     default:
         return -1;
@@ -67,7 +69,7 @@ int main(int argc, char **argv)
   if(ctx == NULL)
   {
     perror("Directory Server: Failed to create the SSL_CTX");
-    return;
+    exit(1);
   }
   
   SSL_CTX_clear_mode(ctx, SSL_MODE_AUTO_RETRY);
@@ -76,7 +78,7 @@ int main(int argc, char **argv)
   if(!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION))
   {
     perror("Directory Server: Failed to set minimum TLS version");
-    return;
+    exit(1);
   }
 
   //We are assuming that CPU exhaustion attacks will not occur so |= SSL_OP_NO_RENEGOTIATION is not necessary
@@ -132,7 +134,7 @@ int main(int argc, char **argv)
   if(bio == NULL)
   {
     BIO_closesocket(sockfd);
-    return;
+    exit(1);
   }
 
   //Wrap socket with BIO object

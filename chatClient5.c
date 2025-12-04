@@ -28,14 +28,16 @@ static int handle_io_failure(SSL *ssl, int res)
     case SSL_ERROR_SYSCALL:
         return -1;
 
+    /*
     case SSL_ERROR_SSL:
         /*
         * If the failure is due to a verification error we can get more
         * information about it from SSL_get_verify_result().
-        */
+        
         if (SSL_get_verify_result(ssl) != X509_V_OK)
             printf("Verify error: %s\n",
                 X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+    */
 
     default:
         return -1;
@@ -57,7 +59,7 @@ int main()
   if(ctx == NULL)
   {
     perror("client: Failed to create the SSL_CTX");
-    return;
+    exit(1);
   }
 
   SSL_CTX_clear_mode(ctx, SSL_MODE_AUTO_RETRY);
@@ -68,14 +70,14 @@ int main()
   if(!SSL_CTX_set_default_verify_paths(ctx))
   {
     perror("client: Couldn't set default certificate store");
-    return;
+    exit(1);
   }
 
   //Ensure minimum TLS version
   if(!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION))
   {
     perror("client: Failed to set minimum TLS version");
-    return;
+    exit(1);
   }
 
   SSL_CTX_load_verify_locations(ctx, "noPassRootCA.crt", NULL);
@@ -85,7 +87,7 @@ int main()
   if(directory_ssl == NULL)
   {
     perror("client: Failed to create SSL object");
-    return;
+    exit(1);
   }
 
 
@@ -113,7 +115,7 @@ int main()
   if (0 != fcntl(dir_sockfd, F_SETFL, O_NONBLOCK)) {
     perror("server: couldn't set directory socket to nonblocking");
     close(dir_sockfd);
-    return;
+    exit(1);
   }
 
   BIO *bio;
@@ -122,7 +124,7 @@ int main()
   if(bio == NULL)
   {
     BIO_closesocket(dir_sockfd);
-    return;
+    exit(1);
   }
 
   //Wrap socket with BIO object
@@ -134,13 +136,13 @@ int main()
   if(!SSL_set_tlsext_host_name(directory_ssl, "Directory Server"))
   {
     perror("client: Failed to set SNI hostname");
-    return;
+    exit(1);
   }
 
   if(!SSL_set1_host(directory_ssl, "Directory Server"))
   {
     perror("client: Failed to set certificate verification hostname");
-    return;
+    exit(1);
   }
 
   while ((ret = SSL_connect(directory_ssl)) != 1)
@@ -148,7 +150,7 @@ int main()
     if (handle_io_failure(directory_ssl, ret) == 1)
       continue;
     printf("Failed to connect to server\n");
-    return;
+    exit(1);
   }
 
 	/* Your directory server logic here... */ 
@@ -166,7 +168,7 @@ int main()
       fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
       SSL_free(directory_ssl);
       SSL_CTX_free(ctx);
-      return;
+      exit(1);
     }
 
     for(;;) //read until server response 
@@ -190,16 +192,16 @@ int main()
                 perror("Error: Connection closed by directory");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
-                return;
+                exit(1);
               case -1:
                 fprintf(stderr, "This system error\n");
                 perror("Error: System error");
                 SSL_free(directory_ssl);
                 SSL_CTX_free(ctx);
-                return;
+                exit(1);
               default:
                 printf("Failed reading remaining data\n");
-                return;
+                exit(1);
             }
           } 
           else 
@@ -263,7 +265,7 @@ int main()
               fprintf(stderr, "%s:%d Error writing to directory server\n", __FILE__, __LINE__); //DEBUG
               SSL_free(directory_ssl);
               SSL_CTX_free(ctx);
-              return;
+              exit(1);
             }
             loop = 0;
           }
@@ -298,15 +300,15 @@ int main()
                   perror("Error: Connection closed by directory");
                   SSL_free(directory_ssl);
                   SSL_CTX_free(ctx);
-                  return;
+                  exit(1);
                 case -1:
                   perror("Error: System error");
                   SSL_free(directory_ssl);
                   SSL_CTX_free(ctx);
-                  return;
+                  exit(1);
                 default:
                   printf("Failed reading remaining data\n");
-                  return;
+                  exit(1);
               }
               fprintf(stderr, "%s:%d Error reading from directory server\n", __FILE__, __LINE__); //DEBUG
             } 
@@ -348,7 +350,7 @@ int main()
   if(chat_ssl == NULL)
   {
     perror("client: Failed to create SSL object");
-    return;
+    exit(1);
   }
   
 	/* Set up the address of the chat server. */
@@ -373,7 +375,7 @@ int main()
   if (0 != fcntl(sockfd, F_SETFL, O_NONBLOCK)) {
     perror("server: couldn't set socket to nonblocking");
     close(sockfd);
-    return;
+    exit(1);
   }
 
   
@@ -383,7 +385,7 @@ int main()
   if(bio_chat == NULL)
   {
     BIO_closesocket(sockfd);
-    return;
+    exit(1);
   }
 
   //Wrap socket with BIO object
@@ -395,13 +397,13 @@ int main()
   if(!SSL_set_tlsext_host_name(chat_ssl, chat_server_selection))
   {
     perror("client: Failed to set SNI hostname");
-    return;
+    exit(1);
   }
 
   if(!SSL_set1_host(chat_ssl, chat_server_selection))
   {
     perror("client: Failed to set certificate verification hostname");
-    return;
+    exit(1);
   }
   /* Do the handshake with the server */
   while ((ret = SSL_connect(chat_ssl)) != 1)
@@ -409,7 +411,7 @@ int main()
     if (handle_io_failure(chat_ssl, ret) == 1)
       continue;
     printf("Failed to connect to server\n");
-    return;
+    exit(1);
   }
 
   char writeBuf[MAX];
@@ -449,7 +451,7 @@ int main()
             SSL_free(directory_ssl);
             SSL_free(chat_ssl);
             SSL_CTX_free(ctx);
-            return;
+            exit(1);
           }
         }
         else
@@ -476,16 +478,16 @@ int main()
               SSL_free(directory_ssl);
               SSL_free(chat_ssl);
               SSL_CTX_free(ctx);
-              return;
+              exit(1);
             case -1:
               perror("Error: System error");
               SSL_free(directory_ssl);
               SSL_free(chat_ssl);
               SSL_CTX_free(ctx);
-              return;
+              exit(1);
             default:
               printf("Failed reading remaining data\n");
-              return;
+              exit(1);
             }
             fprintf(stderr, "%s:%d Error reading from chat server\n", __FILE__, __LINE__); //DEBUG
         } else {
