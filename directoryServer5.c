@@ -50,7 +50,6 @@ int main(int argc, char **argv)
 {
 	struct sockaddr_in cli_addr, serv_addr;
 	fd_set readset, writeset;
-	int	 newsockfd;
   uint64_t options;
  
   struct entry {
