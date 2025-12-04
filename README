@@ -7,10 +7,14 @@
 
 3. Compile the source code using the command: make
 
-4. Start the chat and directory servers in the background: ./directoryServer2 &; ./chatServer2 <"Chat Name"> <Port Num>
-	
-5. Start the client on the same or another host in the foreground: ./chatClient2
+4. Start the directory server in the background or in its own terminal: ./directoryServer5 [&]
 
-6. Select your desired chat server
+5. Start one or more chat servers in the background or in their own terminal: ./chatServer5 <"Chat Topic"> <Port Number> [&]
+   The only valid topics are "Anime", "Sports", or "Video Games".
+   Any other topic will use the certificate and key for Anime, and will fail verification when a client tries to connect.
+	
+5. Start the client on the same or another host in the foreground: ./chatClient5
+
+6. Select an index of a chat server to join it.
 
 7. Remember to kill the server before logging off.
