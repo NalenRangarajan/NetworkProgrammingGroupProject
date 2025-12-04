@@ -51,7 +51,6 @@ int main(int argc, char **argv)
 	struct sockaddr_in cli_addr, serv_addr, dir_serv_addr;
 	fd_set readset, writeset;
   int  usercount = 0;
-	int	 newsockfd;
   int  port;
   char chatname[MAX] = {'\0'};
   uint64_t options;
@@ -499,7 +498,6 @@ int main(int argc, char **argv)
         SSL_set_bio(ssl, client_bio, client_bio);
 
         //attempt handshake
-        int ret;
         if((ret = SSL_accept(ssl)) <= 0)
         {
           if (handle_io_failure(ssl, ret) <= 0)
