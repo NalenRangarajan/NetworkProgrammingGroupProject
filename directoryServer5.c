@@ -1,5 +1,6 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include <sys/queue.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <err.h>
 #include "inet.h"
 #include "common.h"
 
@@ -381,6 +383,7 @@ int main(int argc, char **argv)
                 break;
               case 0:
               case -1:
+              default:
                 LIST_REMOVE(cli, entries);
                 SSL_free(cli->ssl);
                 if(cli->name) free(cli->name);

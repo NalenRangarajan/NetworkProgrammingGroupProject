@@ -1,5 +1,6 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -343,7 +344,7 @@ int main(int argc, char **argv)
     if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) 
     { 
       char s_dir[MAX] = {'\0'};
-      int n_dir = snprintf(s_dir, MAX, "s%s %d", chatname, port);
+      snprintf(s_dir, MAX, "s%s %d", chatname, port);
       while(!SSL_write(directory_ssl, s_dir, MAX))
       {
         if (handle_io_failure(directory_ssl, 0) == 1)

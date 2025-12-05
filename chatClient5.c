@@ -180,7 +180,6 @@ int main()
       { 
         if (FD_ISSET(dir_sockfd, &readset)) 
         { 
-          int p_result;
           ssize_t nread = SSL_read(directory_ssl, s_d1, MAX);
           if (nread <= 0) 
           { 
@@ -434,7 +433,7 @@ int main()
 			if (FD_ISSET(STDIN_FILENO, &readset)) {
 				if (1 == scanf(" %100[^\t\n]", s)) { /* reads until there is a tab or new line and up to 100 characters */
 					/* Send the user's message to the server */
-          int n = snprintf(writeBuf, MAX, "%s", s);
+          snprintf(writeBuf, MAX, "%s", s);
 				} else {
 					fprintf(stderr, "%s:%d Error reading or parsing user input\n", __FILE__, __LINE__); //DEBUG
 				}
