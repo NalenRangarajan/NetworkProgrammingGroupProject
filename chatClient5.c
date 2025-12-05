@@ -160,7 +160,7 @@ int main()
   FD_SET(STDIN_FILENO, &readset); 
   FD_SET(dir_sockfd, &readset); 
   if(select(dir_sockfd+1, &readset, NULL, NULL, NULL) > 0) { 
-    int n = snprintf(s_d, MAX, "c\0"); 
+    snprintf(s_d, MAX, "c"); 
     while(!SSL_write(directory_ssl, s_d, MAX))
     {
       if (handle_io_failure(directory_ssl, 0) == 1)
@@ -253,7 +253,7 @@ int main()
           if(index >= 0 && index <= server_count)
           {
             //select server to join
-            int n1 = snprintf(s_d2, MAX, "c%s\n", server_names[index]);
+            snprintf(s_d2, MAX, "c%s\n", server_names[index]);
             snprintf(chat_server_selection, MAX, "%s", server_names[index]);
             
             while(!SSL_write(directory_ssl, s_d2, MAX))

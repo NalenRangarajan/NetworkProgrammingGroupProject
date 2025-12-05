@@ -9,6 +9,7 @@
 #include <sys/queue.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <err.h>
 #include "inet.h"
 #include "common.h"
 
@@ -49,7 +50,7 @@ static int handle_io_failure(SSL *ssl, int res)
 
 int main(int argc, char **argv)
 {
-	struct sockaddr_in cli_addr, serv_addr, dir_serv_addr;
+	struct sockaddr_in serv_addr, dir_serv_addr;
 	fd_set readset, writeset;
   int  usercount = 0;
   int  port;
@@ -473,7 +474,6 @@ int main(int argc, char **argv)
 			/* Check to see if our listening socket has a pending connection */
 			if (FD_ISSET(sockfd, &readset)) {
 				/* Accept a new connection request */
-				socklen_t clilen = sizeof(cli_addr);
 				if(BIO_do_accept(cli_bio) <= 0)
         {
           //Client disappeared during connection
@@ -539,10 +539,10 @@ int main(int argc, char **argv)
                 if(cli->name)
                 {
                   char s1[MAX]= {'\0'};
-                  int n = snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
+                  snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
                   LIST_FOREACH(clj, &head, entries)
                   {
-                    snprintf(clj->writeBuf, MAX, s1);
+                    snprintf(clj->writeBuf, MAX, "%s", s1);
                   }
                   if(cli->name)
                   {
@@ -559,10 +559,10 @@ int main(int argc, char **argv)
                 if(cli->name)
                 {
                   char s1[MAX]= {'\0'};
-                  int n = snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
+                  snprintf(s1, MAX, "%s has left the chat\nEnter message: ", cli->name);
                   LIST_FOREACH(clj, &head, entries)
                   {
-                    snprintf(clj->writeBuf, MAX, s1);
+                    snprintf(clj->writeBuf, MAX, "%s", s1);
                   }
                   if(cli->name)
                   {
@@ -596,20 +596,19 @@ int main(int argc, char **argv)
                 cli->name = malloc(MAX);
                 snprintf(cli->name, MAX, "%s", s);
                 usercount++;
-                int n = 0;
                 if(usercount == 1)
                 {
-                  n = snprintf(s1, MAX, "You are the first user to join the chat\nEnter message: ");
+                  snprintf(s1, MAX, "You are the first user to join the chat\nEnter message: ");
                 }
                 else
                 {
-                  n = snprintf(s1, MAX, "%s has joined the chat\nEnter message: ",cli->name);
+                  snprintf(s1, MAX, "%s has joined the chat\nEnter message: ",cli->name);
                 }
                 LIST_FOREACH(clj, &head, entries)
                 {
                   if(clj->name)
                   {
-                    snprintf(clj->writeBuf, MAX, s1);
+                    snprintf(clj->writeBuf, MAX, "%s", s1);
                   }
                 }
               }
@@ -649,6 +648,7 @@ int main(int argc, char **argv)
                 break;
               case 0:
               case -1:
+              default:
                 LIST_REMOVE(cli, entries);
                 SSL_free(cli->ssl);
                 if(cli->name)

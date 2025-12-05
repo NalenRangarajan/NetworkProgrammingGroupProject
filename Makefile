@@ -19,11 +19,11 @@ CFLAGS	= -g -ggdb -std=c99 \
 				-Winit-self -Wimplicit-int -Wimplicit-fallthrough \
 				-Wparentheses -Wdangling-else -Wfatal-errors \
 				-Wreturn-type -Wredundant-decls -Wswitch-default -Wshadow \
-				-Wformat=2 -Wformat-nonliteral -Wformat-y2k -Wformat-security
+				-Wformat=2 -Wformat-nonliteral -Wformat-y2k -Wformat-security -Wformat-truncation=0
 CFLAGS	+= -ggdb3
 #CFLAGS	+= -Wconversion
 #CFLAGS	+= -Wc99-c11-compat -Wmaybe-uninitialized \
-					-Wformat-truncation=2 -Wstringop-truncation \
+					 -Wstringop-truncation \
 					-Wformat-overflow=2 -Wformat-signedness
 
 # Uncomment the LIBS line below containing the library that you're using
